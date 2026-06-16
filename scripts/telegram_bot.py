@@ -25,6 +25,7 @@ from . import learned as _learned
 from . import paths as _paths
 from . import reminders as _reminders
 from . import sessions as _sessions
+from . import transcribe as _transcribe
 
 TG_MAX = 4000  # Telegram hard limit is 4096; leave headroom
 HELP = (
@@ -120,6 +121,55 @@ def send_typing(chat_id, thread_id=None) -> None:
         requests.post(f"https://api.telegram.org/bot{token}/sendChatAction", json=payload, timeout=10)
     except requests.RequestException:
         pass
+
+
+def _download_file(token: str, file_id: str) -> bytes | None:
+    """Download a Telegram file by id. The URL embeds the token, so it is never logged."""
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{token}/getFile",
+                         params={"file_id": file_id}, timeout=30)
+        if r.status_code != 200:
+            return None
+        fp = (r.json().get("result") or {}).get("file_path")
+        if not fp:
+            return None
+        fr = requests.get(f"https://api.telegram.org/file/bot{token}/{fp}", timeout=120)
+        return fr.content if fr.status_code == 200 else None
+    except requests.RequestException:
+        return None
+
+
+def _audio_format(msg: dict, obj: dict) -> str:
+    if "voice" in msg:
+        return "ogg"  # Telegram voice notes are OGG/Opus
+    mime = (obj.get("mime_type") or "").lower()
+    for needle, fmt in (("mpeg", "mp3"), ("mp3", "mp3"), ("m4a", "m4a"), ("mp4", "m4a"),
+                        ("aac", "m4a"), ("wav", "wav"), ("webm", "webm"), ("flac", "flac")):
+        if needle in mime:
+            return fmt
+    return "ogg"
+
+
+def _voice_to_text(token: str, msg: dict, cid, thread_id) -> str | None:
+    """Download + transcribe a voice/audio message. Echoes what was heard. Returns text."""
+    obj = msg.get("voice") or msg.get("audio")
+    if not obj:
+        return None
+    send_typing(cid, thread_id)
+    audio = _download_file(token, obj["file_id"])
+    if not audio:
+        send_message("Couldn't fetch that voice message — please try again.", cid, thread_id)
+        return None
+    text = _transcribe.transcribe(audio, _audio_format(msg, obj))
+    if not text:
+        if not _config.get_secret("OPENROUTER_API_KEY"):
+            send_message("Voice isn't set up yet — add OPENROUTER_API_KEY to secrets.env to "
+                         "enable transcription. You can still type to me.", cid, thread_id)
+        else:
+            send_message("Sorry, I couldn't transcribe that — try again, or type it.", cid, thread_id)
+        return None
+    send_message(f"🎙️ {text}", cid, thread_id)  # echo so you can see/correct what was heard
+    return text
 
 
 def get_owner_chat_id():
@@ -251,10 +301,9 @@ def run() -> None:
             offset = upd["update_id"] + 1
             _save_offset(offset)
             msg = upd.get("message") or upd.get("edited_message")
-            if not msg or "text" not in msg:
+            if not msg:
                 continue
             cid = msg["chat"]["id"]
-            text = msg["text"]
             thread_id = msg.get("message_thread_id")  # forum topic, if any
             conversation_id = f"telegram:{cid}" + (f":{thread_id}" if thread_id else "")
             owner = get_owner_chat_id()
@@ -266,12 +315,17 @@ def run() -> None:
                 send_message(
                     "👋 personal-os is now linked to this chat (only this chat is "
                     "authorized). Forum topics work — each topic is its own thread with "
-                    "its own short-term context. Send me anything, or /help.",
+                    "its own short-term context. Send me text or a voice note, or /help.",
                     cid, thread_id,
                 )
             if cid != owner:
                 continue  # drop non-owner BEFORE the engine is touched (no log of body)
             try:
+                text = msg.get("text")
+                if not text and ("voice" in msg or "audio" in msg):
+                    text = _voice_to_text(token, msg, cid, thread_id)
+                if not text:
+                    continue  # unsupported message type, or transcription failed (already replied)
                 _handle_text(text, cid, conversation_id, thread_id)
             except Exception as exc:  # never crash the loop on one bad message
                 _log(f"handler error: {type(exc).__name__}")

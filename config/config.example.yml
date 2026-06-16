@@ -62,6 +62,12 @@ sessions:
   daily_clear: "04:00"         # local (instance tz) time to auto-clear ALL buffers nightly
                                # (long-term memory is always preserved; /clear does it per-thread)
 
+voice:
+  enabled: true                # transcribe Telegram voice notes (needs OPENROUTER_API_KEY)
+  provider: "openrouter"
+  model: "openai/whisper-large-v3"   # any OpenRouter STT model; whisper-large-v3 = strong Farsi
+  language: ""                 # "" = auto-detect language; or pin e.g. "fa" / "en"
+
 # ---------------------------------------------------------------------------
 # runtime: MACHINE-MANAGED block. scripts/config.set_runtime() rewrites ONLY this
 # block textually (preserving everything above). Do not rely on hand edits here.

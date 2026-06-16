@@ -48,6 +48,9 @@ DEFAULT_CONFIG = {
     "active_memory": {"enabled": True, "default_lead_minutes": 60},
     # sessions: per-topic short-term context buffers (the only thing /clear clears).
     "sessions": {"enabled": True, "max_turns": 10, "daily_clear": "04:00"},
+    # voice: transcribe Telegram voice notes via OpenRouter's transcription endpoint.
+    "voice": {"enabled": True, "provider": "openrouter",
+              "model": "openai/whisper-large-v3", "language": ""},
     # runtime: machine-managed block (set via set_runtime); never hand-edit.
     "runtime": {"telegram_chat_id": None},
 }
