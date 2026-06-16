@@ -44,10 +44,17 @@
 - [x] scripts/install_cron.sh (marker-block crontab; n8n line verified preserved; idempotent)
 - [x] Daily digest cron registered for this instance (30 7 server time)
 
-## Phase 6 — Replicability + docs + tests
-- [ ] install.sh (idempotent fresh isolated instance)
-- [ ] AGENT.md (portable operating contract; the 7 principles)
-- [ ] check.sh (engine-free criterion-d layer; engine checks opt-in; criteria a–g)
-- [ ] tests/ (offline unit tests: engine, capture, index, snapshot)
-- [ ] README.md (what / install / verify + acceptance checklist)
-- [ ] Run install.sh in a clean dir → verify empty 2nd instance works
+## Phase 6 — Replicability + docs + tests  ✅
+- [x] install.sh (idempotent fresh isolated instance)
+- [x] AGENT.md (portable operating contract; the 7 principles)
+- [x] check.sh (engine-free criterion-d layer via hashing; engine checks opt-in; criteria a–g)
+- [x] tests/test_offline.py (8 offline unit tests, all pass)
+- [x] README.md (what / install / verify + acceptance checklist + cost/privacy/replicate)
+- [x] install.sh in a clean dir → empty 2nd instance verified (check.sh criterion g)
+- [x] ./check.sh => 10 passed · 0 failed (live engine) / 8 passed · 0 failed (free)
+
+## Go-live (needs user)
+- [ ] Telegram token in secrets.env → live bot test
+- [ ] Fill authored/about-me.md from draft → reindex
+- [ ] git push (provide PAT/deploy key; remote not configured yet)
+- [~] Disable SSH password login (optional; user confirm)

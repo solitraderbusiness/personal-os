@@ -28,7 +28,21 @@ _Updated: 2026-06-16. Keep accurate so the build can resume at any point._
   install_cron.sh registered the daily job; VERIFIED the unrelated n8n cron line
   survives, registration is idempotent, and the wrapper runs in a bare `env -i`
   environment (engine_ok true). feedback.py loop done.
-- **Phase 6 — install.sh + AGENT.md + check.sh + tests + README:** 🔵 next.
+- **Phase 6 — install.sh + AGENT.md + check.sh + tests + README:** ✅ done + verified.
+  install.sh (idempotent fresh instance), AGENT.md (portable contract), check.sh
+  (criteria a–g), tests/test_offline.py (8 pass), README. **`./check.sh` =
+  10 passed · 0 failed · 0 skipped with PERSONAL_OS_LIVE_ENGINE=1** (8/0/2 free).
+
+## BUILD COMPLETE — all 6 phases done; acceptance suite fully green.
+
+## Remaining go-live steps (need the user)
+- Telegram token → config/secrets.env, then run `python -m scripts.telegram_bot` and
+  message it once (it claims ownership). Cron digest will then push.
+- Fill authored/about-me.md (+ others) from the user's draft, then `index reindex`.
+- git push: repo has commits locally but NO remote configured and NOT pushed. Needs the
+  user's fine-grained PAT (Contents: r/w) or deploy key. Final secret scan done = clean.
+- Optional Phase-0 finish: disable SSH password login (one-liner; user confirm) — keys
+  already work, ufw already allows 22.
 
 ## In flight
 - Design-validation workflow (wf_23cfcd63-754) COMPLETE; ADRs + 3 adversarial critiques

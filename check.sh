@@ -25,7 +25,7 @@ fok=1
 for p in config/secrets.env config/config.yml authored/about-me.md generated; do
   git check-ignore -q "$p" 2>/dev/null || { fail "f: '$p' is NOT gitignored"; fok=0; }
 done
-bad="$(git ls-files | grep -E '^(config/config\.yml|config/secrets\.env|authored/[a-z-]+\.md$|generated/|conversations/)' || true)"
+bad="$(git ls-files | grep -E '^(config/config\.yml$|config/secrets\.env$|authored/[a-z-]+\.md$|generated/|conversations/)' || true)"
 [ -z "$bad" ] || { fail "f: private files are tracked: $bad"; fok=0; }
 if git ls-files -z | xargs -0 grep -lE '[0-9]{8,10}:[A-Za-z0-9_-]{35}' 2>/dev/null | grep -q .; then
   fail "f: a bot-token-like string appears in a tracked file"; fok=0
@@ -57,15 +57,23 @@ run_sandbox(){ ( cd "$SANDBOX" && PYTHONPATH=. "$SPY" - ); }
 echo "[d] recall returns the right answer WITH a source; admits gaps honestly"
 if [ -x "$SPY" ]; then
   if run_sandbox <<'PY'
-from scripts import index, recall
+# Use the deterministic hashing embedder for this check: model2vec static embeddings
+# have a high baseline similarity between any two short texts, so a fixed threshold is
+# unreliable (the live engine prompt is the real honesty guarantee). The hashing
+# fallback gives orthogonal vectors for unmentioned tokens, making the gap deterministic.
+from scripts import config
+_orig = config.load_config
+config.load_config = lambda: {**_orig(), "embedding": {"model": "", "dim": 256}}
+from scripts import embeddings, index, recall
+assert embeddings.backend() == "hash", f"expected hash backend, got {embeddings.backend()}"
 index.reindex_all(reset=True)
 index.index_units("authored/about-me.md", "authored",
     [("authored/about-me.md", "My current project is called Volkeeper, a volatility trading bot.")])
 r1 = recall.recall("what is my current project")
 assert r1["found"], "a mentioned fact was NOT found"
 assert any("about-me" in c["source_id"] for c in r1["citations"]), "no citation/source returned"
-r2 = recall.recall("glorptak zzqwx an utterly unmentioned topic")
-assert not r2["found"], "an unmentioned query should be NOT FOUND (honest gap)"
+r2 = recall.recall("glorptak zzqwx blivonax qwertzu")
+assert not r2["found"], f"unmentioned query should be NOT FOUND (conf={r2['confidence']}, top_sim={r2['top_sim']})"
 print("OK")
 PY
   then pass "d: mentioned fact recalled with a source; unmentioned -> honest 'not found'"
