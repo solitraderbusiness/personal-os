@@ -46,7 +46,7 @@ def transcribe(audio_bytes: bytes, fmt: str = "ogg", *, language: str | None = N
             ENDPOINT,
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json=body,
-            timeout=120,
+            timeout=45,
         )
         if r.status_code != 200:
             return None

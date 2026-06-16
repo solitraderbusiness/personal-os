@@ -46,8 +46,9 @@ HELP = (
 
 
 def _log(msg: str) -> None:
-    """Stderr log. Messages are built by us and never contain the token or API URL."""
-    print(f"[telegram] {msg}", file=sys.stderr, flush=True)
+    """Stderr log with timestamp. Never contains the token or API URL."""
+    from datetime import datetime
+    print(f"[telegram {datetime.now().strftime('%H:%M:%S')}] {msg}", file=sys.stderr, flush=True)
 
 
 def _token() -> str | None:
@@ -127,13 +128,13 @@ def _download_file(token: str, file_id: str) -> bytes | None:
     """Download a Telegram file by id. The URL embeds the token, so it is never logged."""
     try:
         r = requests.get(f"https://api.telegram.org/bot{token}/getFile",
-                         params={"file_id": file_id}, timeout=30)
+                         params={"file_id": file_id}, timeout=15)
         if r.status_code != 200:
             return None
         fp = (r.json().get("result") or {}).get("file_path")
         if not fp:
             return None
-        fr = requests.get(f"https://api.telegram.org/file/bot{token}/{fp}", timeout=120)
+        fr = requests.get(f"https://api.telegram.org/file/bot{token}/{fp}", timeout=45)
         return fr.content if fr.status_code == 200 else None
     except requests.RequestException:
         return None

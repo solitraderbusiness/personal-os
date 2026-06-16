@@ -25,6 +25,7 @@ import json
 import os
 import subprocess
 import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -32,6 +33,11 @@ import requests
 
 from . import config as _config
 from . import paths as _paths
+
+# Serialize `claude` CLI invocations: each spawns a ~300-500MB Node process, and this box
+# is memory-tight (shared with n8n). Running the answer + background-capture calls at once
+# can thrash/OOM the box. This lock guarantees only ONE claude subprocess runs at a time.
+_CLI_LOCK = threading.Lock()
 
 # Standing system instruction prepended to EVERY call (D17b). The empty-tools
 # sandbox is the structural backstop; this is the behavioral one.
@@ -168,8 +174,9 @@ def _cli_complete(final_system, payload, model, tier, command, timeout, retries)
         for attempt in range(retries + 1):
             started = time.monotonic()
             try:
-                proc = subprocess.run(cmd, input=payload.encode("utf-8"),
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+                with _CLI_LOCK:  # only one claude subprocess at a time (memory safety)
+                    proc = subprocess.run(cmd, input=payload.encode("utf-8"),
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
             except FileNotFoundError:
                 _log_call(model, tier, 0, False, None)
                 raise EngineError(f"engine command not found: {command}", kind="not_found")
