@@ -11,7 +11,7 @@ paths:
                                # fresh instance at its own dir to keep data separate.
 
 models:
-  answer: ""                   # "" = the engine's default model. Or pin a model id.
+  answer: "claude-sonnet-4-6"  # the assistant's model. "" = engine default (Opus here — pricier).
   summary: "claude-haiku-4-5-20251001"   # cheap/fast tier for per-turn capture
   digest:  "claude-haiku-4-5-20251001"   # cheap/fast tier for the daily digest
 
