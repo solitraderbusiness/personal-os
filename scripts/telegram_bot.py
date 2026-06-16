@@ -108,6 +108,20 @@ def send_message(text: str, chat_id=None, thread_id=None) -> bool:
     return ok
 
 
+def send_typing(chat_id, thread_id=None) -> None:
+    """Show a 'typing…' indicator (best-effort) while the engine thinks."""
+    token = _token()
+    if not token or chat_id is None:
+        return
+    try:
+        payload = {"chat_id": chat_id, "action": "typing"}
+        if thread_id is not None:
+            payload["message_thread_id"] = thread_id
+        requests.post(f"https://api.telegram.org/bot{token}/sendChatAction", json=payload, timeout=10)
+    except requests.RequestException:
+        pass
+
+
 def get_owner_chat_id():
     return _config.runtime("telegram_chat_id")
 
@@ -193,6 +207,7 @@ def _handle_text(text: str, cid, conversation_id: str, thread_id=None) -> None:
               else "No matching items for those ids.")
         return
 
+    send_typing(cid, thread_id)
     res = _assistant.respond(text, conversation_id=conversation_id)
     out = res["answer"]
     cites = res.get("citations") or []

@@ -11,6 +11,8 @@ Both chat.py and telegram_bot.py call this; there is no second copy of the loop.
 """
 from __future__ import annotations
 
+import threading
+
 from . import capture as _capture
 from . import config as _config
 from . import engine as _engine
@@ -78,8 +80,16 @@ def respond(message: str, conversation_id: str = "terminal") -> dict:
         )
 
     if not engine_error:
+        # Session buffer (synchronous, instant) gives immediate in-thread continuity.
         _sessions.append_turn(conversation_id, message, answer)
-        _capture.capture_turn(message, answer, conversation_id)
+        # Capture (summary + extraction + index) is a second model call — the slow part.
+        # Run it in the BACKGROUND so the reply returns immediately (best-effort; it
+        # swallows its own errors). Long-term memory still lands a few seconds later.
+        threading.Thread(
+            target=_capture.capture_turn,
+            args=(message, answer, conversation_id),
+            daemon=True,
+        ).start()
 
     return {
         "answer": answer,
