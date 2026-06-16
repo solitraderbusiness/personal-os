@@ -196,7 +196,10 @@ def _handle_text(text: str, cid, conversation_id: str, thread_id=None) -> None:
     res = _assistant.respond(text, conversation_id=conversation_id)
     out = res["answer"]
     cites = res.get("citations") or []
-    if cites and not res.get("engine_error"):
+    # Only show the provenance line when memory was genuinely relevant (strong match) —
+    # otherwise it's noise (e.g. citing unrelated notes for a general question). The model
+    # still cites specific facts inline when it uses them.
+    if cites and not res.get("engine_error") and res.get("confidence") == "strong":
         out += "\n\n— sources: " + " ".join(f"[{c['source_id']}]" for c in cites[:5])
     reply(out)
 

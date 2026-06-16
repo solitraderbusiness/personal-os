@@ -31,8 +31,10 @@ STANDING_RULES = """## How to answer (standing rules — authoritative)
   [daily/2026-06-16#002] or [authored/about-me.md].
 - If the retrieval confidence is weak or no strong matches were found (the MEMORY block
   says so), be cautious and prefer admitting you don't have it over guessing.
-- For general world knowledge not about the user, answer normally and helpfully.
-- Be concise and match the persona in the standing context."""
+- For general world knowledge or questions about yourself/your capabilities, answer
+  normally, helpfully, and intelligently — you do not need memory for those.
+- Reply in the SAME language the user wrote their message in.
+- Be genuinely useful and natural; match the persona in the standing context."""
 
 
 def build_system_prompt(agent_md: str, snapshot_text: str, rec: dict) -> str:
