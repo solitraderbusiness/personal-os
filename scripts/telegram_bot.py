@@ -285,6 +285,7 @@ def run() -> None:
     _log(f"polling (owner={get_owner_chat_id()}). Ctrl-C to stop.")
     backoff = 1
     while True:
+        _config.reload()  # pick up config/secrets edits (new keys, owner, model) without a restart
         try:
             updates = _get_updates(token, offset, poll)
             backoff = 1

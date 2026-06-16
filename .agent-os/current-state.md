@@ -69,6 +69,20 @@ clear. tz-aware cron (digest 7:30 Tehran=04:00 UTC, clear 4:00 Tehran=00:30 UTC;
 preserved). Bot restarted on Phase-8 code with owner reset → the new group claims it on
 first message. Isolated test passed (POS_DATA_DIR).
 
+## Phase 9 — Voice + perf/UX (2026-06-16)
+- **Latency fix:** capture (2nd model call) now runs in a background daemon thread, so the
+  reply returns right after the answer call (~17s -> ~7s perceived). Telegram "typing…"
+  indicator while thinking. (Server is small: 2 cores, ~1.2GB free; each claude-CLI call
+  ~7s due to Claude Code overhead — a direct API engine would be faster, future option.)
+- **Voice (scripts/transcribe.py):** Telegram voice/audio -> OpenRouter
+  /api/v1/audio/transcriptions (ogg accepted directly, no ffmpeg). One OPENROUTER_API_KEY;
+  STT model configurable (config.voice.model, default openai/whisper-large-v3, strong Farsi).
+  Bot echoes "🎙️ <transcript>" then answers. Best-effort (missing key -> friendly fallback).
+- **UX:** sources line only on strong recall; reply in the user's language.
+- **Live reload:** telegram bot calls config.reload() each poll cycle, so new keys / owner /
+  model changes take effect within ~50s WITHOUT a restart.
+- Pending from user: add OPENROUTER_API_KEY to secrets.env to activate voice.
+
 ## In flight
 - Design-validation workflow (wf_23cfcd63-754) COMPLETE; ADRs + 3 adversarial critiques
   folded into decision log (D17) and code. No personal-data-in-git leak found by critics.
