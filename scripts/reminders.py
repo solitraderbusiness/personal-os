@@ -112,7 +112,7 @@ def format_upcoming(limit: int = 10) -> str:
     ups = upcoming(limit)
     if not ups:
         return ""
-    return "\n".join(f"- [{it['id']}] {it['text']} — {_fmt_local(it['due_utc'])}" for it in ups)
+    return "\n".join(f"- {it['text']} — {_fmt_local(it['due_utc'])}" for it in ups)
 
 
 def check_and_notify(now_utc: datetime | None = None) -> int:

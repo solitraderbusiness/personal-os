@@ -12,15 +12,19 @@ paths:
                                # "" = the repo directory itself (default). Point a
                                # fresh instance at its own dir to keep data separate.
 
-models:
-  answer: "claude-sonnet-4-6"  # the assistant's model. "" = engine default (Opus here — pricier).
-  summary: "claude-haiku-4-5-20251001"   # cheap/fast tier for per-turn capture
-  digest:  "claude-haiku-4-5-20251001"   # cheap/fast tier for the daily digest
+models:                        # the router auto-picks answer/deep/code by message complexity
+  answer: "claude-haiku-4-5-20251001"   # fast default for most messages
+  deep:   "claude-sonnet-4-6"           # escalated for reasoning/analysis
+  code:   "claude-opus-4-8"             # escalated for coding / serious work
+  summary: "claude-haiku-4-5-20251001"  # cheap/fast tier for per-turn capture
+  digest:  "claude-haiku-4-5-20251001"  # cheap/fast tier for the daily digest
 
 engine:
   command: "claude"            # the model-agnostic seam. Swap engine.py to change vendor.
   timeout_seconds: 120
   max_retries: 2
+  fallback_model: "google/gemini-2.5-flash"  # via OpenRouter when the Claude CLI fails
+                                              # (needs OPENROUTER_API_KEY). "" to disable.
 
 embedding:
   model: "minishlab/potion-base-8M"   # local static embeddings (no torch, zero API cost).

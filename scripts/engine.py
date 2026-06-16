@@ -28,6 +28,8 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
+import requests
+
 from . import config as _config
 from . import paths as _paths
 
@@ -142,33 +144,32 @@ def complete(
     if data:
         payload = f"{payload}\n\n{data_block('MEMORY', data)}".strip()
 
+    try:
+        return _cli_complete(final_system, payload, model, tier, command, timeout, retries)
+    except EngineError as exc:
+        fallback = _fallback_complete(final_system, payload, max_tokens, timeout)
+        if fallback is not None:
+            return fallback
+        raise exc
+
+
+def _cli_complete(final_system, payload, model, tier, command, timeout, retries) -> str:
+    """Run the sandboxed `claude -p` call (with retries). Raises EngineError on failure."""
     sysf = tempfile.NamedTemporaryFile("w", suffix=".sys.txt", delete=False, encoding="utf-8")
     try:
         sysf.write(final_system)
         sysf.flush()
         sysf.close()
-
-        cmd = [
-            command, "-p",
-            "--output-format", "json",
-            "--system-prompt-file", sysf.name,
-            "--allowedTools", "",
-            "--max-turns", "1",
-        ]
+        cmd = [command, "-p", "--output-format", "json", "--system-prompt-file", sysf.name,
+               "--allowedTools", "", "--max-turns", "1"]
         if model:
             cmd += ["--model", model]
-
         last_err: EngineError | None = None
         for attempt in range(retries + 1):
             started = time.monotonic()
             try:
-                proc = subprocess.run(
-                    cmd,
-                    input=(payload).encode("utf-8"),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    timeout=timeout,
-                )
+                proc = subprocess.run(cmd, input=payload.encode("utf-8"),
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
             except FileNotFoundError:
                 _log_call(model, tier, 0, False, None)
                 raise EngineError(f"engine command not found: {command}", kind="not_found")
@@ -179,21 +180,15 @@ def complete(
                     time.sleep(1.0 * (attempt + 1))
                     continue
                 raise last_err
-
             dur = int((time.monotonic() - started) * 1000)
             raw = proc.stdout.decode("utf-8", "replace").strip()
             try:
                 parsed = json.loads(raw)
             except json.JSONDecodeError:
                 _log_call(model, tier, dur, False, None)
-                # No parseable JSON: if the binary clearly failed, treat as bad_output.
-                last_err = EngineError(
+                raise EngineError(
                     f"unparseable engine output (exit {proc.returncode}): "
-                    f"{(raw or proc.stderr.decode('utf-8', 'replace'))[:200]}",
-                    kind="bad_output",
-                )
-                raise last_err  # deterministic; do not retry / spend more
-
+                    f"{(raw or proc.stderr.decode('utf-8', 'replace'))[:200]}", kind="bad_output")
             try:
                 result = _classify_and_check(parsed)
                 _log_call(model, tier, dur, True, parsed.get("total_cost_usd"))
@@ -201,9 +196,7 @@ def complete(
             except EngineError as exc:
                 last_err = exc
                 _log_call(model, tier, dur, False, parsed.get("total_cost_usd"))
-                retryable = exc.kind == "api_error" and (
-                    exc.status in _RETRYABLE_STATUS or exc.status is None
-                )
+                retryable = exc.kind == "api_error" and (exc.status in _RETRYABLE_STATUS or exc.status is None)
                 if retryable and attempt < retries:
                     time.sleep(1.0 * (attempt + 1))
                     continue
@@ -214,6 +207,37 @@ def complete(
             os.unlink(sysf.name)
         except OSError:
             pass
+
+
+def _fallback_complete(final_system: str, payload: str, max_tokens: int, timeout: int) -> str | None:
+    """Fallback via OpenRouter (e.g. Gemini Flash) when the Claude CLI call fails. Returns
+    None if no fallback is configured (no OPENROUTER_API_KEY / no engine.fallback_model).
+    Keeps the SAME injection-guarded system + untrusted-data payload."""
+    eng = _config.load_config().get("engine", {}) or {}
+    model = eng.get("fallback_model")
+    key = _config.get_secret("OPENROUTER_API_KEY")
+    if not model or not key:
+        return None
+    started = time.monotonic()
+    try:
+        r = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}"},
+            json={"model": model, "max_tokens": max_tokens, "messages": [
+                {"role": "system", "content": final_system},
+                {"role": "user", "content": payload}]},
+            timeout=timeout or 120,
+        )
+        dur = int((time.monotonic() - started) * 1000)
+        if r.status_code != 200:
+            _log_call(f"fallback:{model}", "fallback", dur, False, None)
+            return None
+        body = r.json()
+        text = (((body.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        _log_call(f"fallback:{model}", "fallback", dur, bool(text), (body.get("usage") or {}).get("cost"))
+        return text or None
+    except (requests.RequestException, ValueError, KeyError, IndexError):
+        return None
 
 
 def available() -> bool:

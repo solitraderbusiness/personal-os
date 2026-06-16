@@ -65,11 +65,11 @@ def _fingerprint(now: datetime) -> str:
     return h.hexdigest()[:16]
 
 
-def _section(title: str, source: str, body: str) -> str:
+def _section(title: str, body: str) -> str:
     body = body.strip()
     if not body:
         return ""
-    return f"## {title}  (source: {source})\n{body}\n"
+    return f"## {title}\n{body}\n"
 
 
 def build_snapshot(*, now: datetime | None = None) -> dict:
@@ -84,12 +84,12 @@ def build_snapshot(*, now: datetime | None = None) -> dict:
     for name in IDENTITY_FILES:
         body = _read_authored(name)
         if body:
-            identity_parts.append(_section(_title_for(name), f"authored/{name}", body))
+            identity_parts.append(_section(_title_for(name), body))
             sources.append(f"authored/{name}")
     for name in ("priorities.md", "reminders.md"):
         body = _read_authored(name)
         if body and cfg.get(f"include_{name.split('.')[0]}", True):
-            identity_parts.append(_section(_title_for(name), f"authored/{name}", body))
+            identity_parts.append(_section(_title_for(name), body))
             sources.append(f"authored/{name}")
     identity_text = "\n".join(p for p in identity_parts if p)
 
@@ -97,7 +97,7 @@ def build_snapshot(*, now: datetime | None = None) -> dict:
     learned_text = _learned.render_for_snapshot()
     up_text = _reminders.format_upcoming(8)
     if learned_text:
-        identity_text += "\n## Working memory (auto-learned; not yet confirmed)\n" + learned_text + "\n"
+        identity_text += "\n## Things you've recently told me\n" + learned_text + "\n"
     if up_text:
         identity_text += "\n## Upcoming reminders\n" + up_text + "\n"
 
@@ -109,7 +109,7 @@ def build_snapshot(*, now: datetime | None = None) -> dict:
     budget = cap - identity_tokens - 40  # reserve for headers
     mem_lines, omitted = [], 0
     for e in recent:
-        line = f"- ({e['source_id']}) {e['text'].strip()}"
+        line = f"- {e['text'].strip()}"
         if est_tokens("\n".join(mem_lines + [line]), cpt) <= budget:
             mem_lines.append(line)
         else:
@@ -119,10 +119,7 @@ def build_snapshot(*, now: datetime | None = None) -> dict:
     # --- assemble body ---
     parts = ["# Identity & standing context\n", identity_text]
     if mem_lines:
-        parts.append(
-            "\n## Recent memory (most recent first; full logs in generated/memory/daily/)\n"
-            + "\n".join(mem_lines)
-        )
+        parts.append("\n## Recently discussed (most recent first)\n" + "\n".join(mem_lines))
     if over_cap:
         parts.append(
             "\n> NOTE: authored identity exceeds the snapshot token cap; it is kept in "

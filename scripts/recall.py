@@ -64,15 +64,14 @@ def format_memory_block(rec: dict) -> str:
     """Render retrieved memory as DATA for the engine. On 'none' confidence we send an
     explicit no-match note (so the model admits the gap rather than guessing)."""
     if not rec["hits"] or rec["confidence"] == "none":
-        return "No strong matches were found in the user's memory for this query."
-    lines = [f"Retrieved memory (confidence: {rec['confidence']}):"]
+        return "(No relevant past context found for this message.)"
+    lines = ["Relevant context from earlier conversations (use silently — never cite, list, "
+             "or mention files/sources):"]
     for h in rec["hits"]:
-        lines.append(f"[{h['source_id']}] {h['text'].strip()}")
+        lines.append(f"- {h['text'].strip()}")
     if rec["confidence"] != "strong":
-        lines.append(
-            "\n(Note: these matches are weak — only use them if they clearly contain the "
-            "answer; otherwise say you don't have it.)"
-        )
+        lines.append("(These are loose matches — use only if clearly relevant; otherwise "
+                     "just say you don't have it.)")
     return "\n".join(lines)
 
 

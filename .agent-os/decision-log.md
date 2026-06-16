@@ -126,6 +126,31 @@ issues in the already-written spine. Resolutions (D17):
   instantly in the snapshot; promotion to authored canon is approval-gated (/keep, /drop).
   Timezone-aware reminders (Asia/Tehran) with a 10-min cron tick pushing Telegram nudges
   before due. /keep /drop /learned /reminders bot commands; digest lists pending + upcoming.
+## 2026-06-16 — Natural companion UX + speed + resilience (user feedback)
+- **D20a — Conversational, no internals leaked.** The honest-epistemics design was leaking
+  file paths/source tags ([authored/about-me.md], [daily/...]) and meta-talk into replies.
+  Fixed: STANDING_RULES rewritten to "talk like a friend, never mention files/paths/sources";
+  AGENT.md is NO LONGER injected into answers (it's full of architecture/file talk — kept as
+  repo doc only); recall memory block, snapshot sections, recent-memory + reminder lines all
+  stripped of source ids/paths; the appended "— sources:" line removed. Verified: a real
+  reply about the user contained ZERO leak patterns. Honesty (no fabrication, admit gaps)
+  preserved via the prompt; provenance stays internal (recall still has source_ids for the
+  system + check.sh). This adjusts principle 6's *presentation* per the user: honest, not
+  technical.
+- **D20b — Model router (user's design).** assistant.route_tier() picks by message
+  complexity, instantly (no extra call): default Haiku (answer), Sonnet (deep) on
+  reasoning keywords / long messages, Opus (code) on coding keywords. Faster + cheaper for
+  casual chat; escalates only when needed.
+- **D20c — Speed.** Capture already async (D-perf). Trimmed per-call context: recall k 6->4,
+  sessions max_turns 10->6, and dropped the full AGENT.md from the prompt. ~7s Haiku floor
+  remains (Claude Code CLI overhead) — documented; direct-API would be faster but the user
+  wants the Max subscription.
+- **D20d — OpenRouter fallback.** engine.complete() falls back to OpenRouter
+  (google/gemini-2.5-flash) when the Claude CLI call fails (overload/down), keeping the same
+  injection-guarded system + untrusted-data payload. Claude stays primary (subscription);
+  fallback only on failure. Verified working. (Telegram bot live-reloads config each poll, so
+  model/key/owner changes need no restart.)
+
 - **D19 — LESSON (mistake I made, must never repeat): I deleted live user data during a
   test.** A throwaway test's cleanup ran `paths.daily_file().unlink()` + `index.reindex_all(
   reset=True)` against the LIVE instance while the user was actively chatting with the bot —

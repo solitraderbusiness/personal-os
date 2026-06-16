@@ -21,13 +21,18 @@ DEFAULT_CONFIG = {
     "instance": {"name": "personal-os", "timezone": "UTC"},
     # data_dir: where authored/, generated/, conversations/ live. "" => repo root.
     "paths": {"data_dir": ""},
-    # "" for answer => Claude Code default model. Cheap tiers pinned to Haiku.
+    # Tiered answer models (the router picks by message complexity): fast Haiku default,
+    # Sonnet when it needs to think, Opus for coding. summary/digest stay cheap (Haiku).
     "models": {
-        "answer": "",
+        "answer": "claude-haiku-4-5-20251001",   # default fast (most messages)
+        "deep": "claude-sonnet-4-6",              # escalate for reasoning/analysis
+        "code": "claude-opus-4-8",                # coding / serious
         "summary": "claude-haiku-4-5-20251001",
         "digest": "claude-haiku-4-5-20251001",
     },
-    "engine": {"command": "claude", "timeout_seconds": 120, "max_retries": 2},
+    # fallback_model: used via OpenRouter when the Claude CLI call fails (overload/down).
+    "engine": {"command": "claude", "timeout_seconds": 120, "max_retries": 2,
+               "fallback_model": "google/gemini-2.5-flash"},
     "embedding": {"model": "minishlab/potion-base-8M", "dim": 256},
     "snapshot": {
         "token_cap": 1800,      # hard cap (~1300-2000 target)
@@ -36,7 +41,7 @@ DEFAULT_CONFIG = {
         "ttl_minutes": 720,     # rebuild if older than this (or sources changed / new day)
     },
     "recall": {
-        "k": 6,                 # results returned to the model
+        "k": 4,                 # results returned to the model (kept lean for speed)
         "candidate_k": 24,      # per-modality candidates before fusion
         "rrf_k": 60,            # Reciprocal Rank Fusion constant
         "weak_sim": 0.35,       # below this top cosine sim => flag "no strong matches"
@@ -47,7 +52,7 @@ DEFAULT_CONFIG = {
     # active memory: auto-learn from chat (Tier 1) + timed reminders.
     "active_memory": {"enabled": True, "default_lead_minutes": 60},
     # sessions: per-topic short-term context buffers (the only thing /clear clears).
-    "sessions": {"enabled": True, "max_turns": 10, "daily_clear": "04:00"},
+    "sessions": {"enabled": True, "max_turns": 6, "daily_clear": "04:00"},
     # voice: transcribe Telegram voice notes via OpenRouter's transcription endpoint.
     "voice": {"enabled": True, "provider": "openrouter",
               "model": "openai/whisper-large-v3", "language": ""},
