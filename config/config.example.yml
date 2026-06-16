@@ -1,0 +1,54 @@
+# personal-os — instance config (TEMPLATE)
+# Copy to config.yml (install.sh does it for you). config.yml is gitignored.
+# Every value here has a built-in default; you only need to override what differs.
+
+instance:
+  name: "personal-os"          # label for this instance (yours alone)
+
+paths:
+  data_dir: ""                 # where authored/, generated/, conversations/ live.
+                               # "" = the repo directory itself (default). Point a
+                               # fresh instance at its own dir to keep data separate.
+
+models:
+  answer: ""                   # "" = the engine's default model. Or pin a model id.
+  summary: "claude-haiku-4-5-20251001"   # cheap/fast tier for per-turn capture
+  digest:  "claude-haiku-4-5-20251001"   # cheap/fast tier for the daily digest
+
+engine:
+  command: "claude"            # the model-agnostic seam. Swap engine.py to change vendor.
+  timeout_seconds: 120
+  max_retries: 2
+
+embedding:
+  model: "minishlab/potion-base-8M"   # local static embeddings (no torch, zero API cost).
+                                       # "" or unavailable => deterministic hashing fallback.
+  dim: 256                            # advisory; the index probes the real dim at build time.
+
+snapshot:
+  token_cap: 1800              # HARD cap on the injection snapshot (~1300-2000 target)
+  recent_days: 7               # how far back "recent memory" is pulled from
+  max_reminders: 12
+  ttl_minutes: 720             # rebuild snapshot if older than this (or sources changed)
+
+recall:
+  k: 6                         # results handed to the model
+  candidate_k: 24              # per-modality candidates before fusion
+  rrf_k: 60                    # Reciprocal Rank Fusion constant
+  weak_sim: 0.35               # top cosine sim below this => flag "no strong matches"
+
+telegram:
+  enabled: true                # if false (or no token in secrets.env) the bot/push are skipped gracefully
+  poll_timeout: 50             # long-poll seconds
+
+digest:
+  hour: 7                      # cron time (server local) for the daily digest
+  minute: 30
+  recent_days: 3               # days of activity the digest reviews
+
+# ---------------------------------------------------------------------------
+# runtime: MACHINE-MANAGED block. scripts/config.set_runtime() rewrites ONLY this
+# block textually (preserving everything above). Do not rely on hand edits here.
+# ---------------------------------------------------------------------------
+runtime:   # machine-managed by set_runtime() — do not hand-edit
+  telegram_chat_id: null       # the single authorized chat, captured on first contact

@@ -1,0 +1,121 @@
+# personal-os — Decision Log
+
+Every non-obvious choice and why. Newest at the bottom. Dates absolute.
+
+## 2026-06-16 — Environment & stack (verified on target server srv921235)
+- **D1 — Language: Python 3.12.** Mature libs for embeddings (model2vec), sqlite-vec
+  bindings, and a stdlib-only Telegram long-poll. Single language across the engine.
+- **D2 — Engine boundary: the local `claude` CLI in print mode.** `claude -p
+  --model <model> --output-format json` returns JSON with a `.result` field and
+  works headlessly using existing Claude Code auth — **no API key needed**. Verified
+  live (`ENGINE_OK`). One adapter module (`scripts/engine.py`) wraps it; swapping to
+  a direct API or local model = replace only that module. This is the model-agnostic
+  seam (principle 3) and the cron-friendly headless path the spec asks for.
+- **D3 — Model tiers.** Answer tier = Claude Code default model; summary/digest cheap
+  tier = `claude-haiku-4-5-20251001`. Both via the same adapter with `--model`. Tiers
+  are config keys so they are swappable.
+- **D4 — Embeddings: model2vec (static embeddings) + deterministic hashing fallback.**
+  No torch, CPU-only, zero API cost, fast. Behind a pluggable embedder interface; if
+  the model isn't downloaded, a deterministic hashing embedder keeps the system
+  working offline and lets tests run without network. (model2vec 0.8.2 confirmed
+  pip-available.)
+- **D5 — Vector store: sqlite-vec (vec0) + FTS5 in ONE sqlite file.** Hybrid search
+  fuses semantic + keyword via Reciprocal Rank Fusion (RRF). Single portable file
+  (principle 3). Reranker is a clearly-marked no-op seam with a TODO (out of scope v1).
+  (sqlite-vec 0.1.9 confirmed pip-available.)
+- **D6 — Telegram: lightweight long-poll using stdlib + `requests`.** getUpdates /
+  sendMessage; restricted to a single authorized chat_id (captured on first message).
+  No heavy framework (understood > opaque). Token from gitignored `secrets.env`.
+- **D7 — Scheduling: cron** (spec default), invoking the digest headlessly via the
+  venv + `claude -p`.
+
+## 2026-06-16 — Deployment choices (from user Q&A)
+- **D8 — Run as root in `/root/projects/personal-os` for now** (user choice). Non-root
+  service user remains the documented go-live recommendation, and `install.sh` runs
+  as whatever user invokes it, so fresh instances are non-root by default.
+- **D9 — Phase 0 hardening status.** ufw is **active** and **allows SSH/22** (verified)
+  → no firewall lockout risk. 5 SSH keys present in root's authorized_keys; pubkey
+  auth on. `PasswordAuthentication` is currently effectively **yes** (cloud-init file
+  overrides the cloudimg one). Disabling password login is *safe* given the keys, but
+  is deferred to an explicit go-live confirmation rather than silently changing how
+  the user logs in (principle 7). Documented as a one-liner toggle.
+- **D10 — Telegram token: user provides "now"** into gitignored `config/secrets.env`
+  themselves (they paste it via the shell, never to me, never committed). They are
+  regenerating the token before any public exposure.
+
+## 2026-06-16 — Build method
+- **D11 — `.agent-os/` is committed** (build documentation, contains no personal data).
+  `.claude/` is gitignored (harness state / possible transcripts).
+- **D12 — Architecture validated by a design workflow** (6 subsystem architects → 1
+  synthesizer producing frozen interfaces/ADRs → 3 adversarial critics). Findings are
+  folded into this log and the implementation before coding the engine.
+- **D13 — Engine subprocess is SANDBOXED.** Verified invocation:
+  `claude -p --model <m> --system-prompt-file <f> --allowedTools "" --max-turns 1
+  --output-format json`, user content via **stdin**. Empty allowed-tools + single
+  turn = a pure text completion with NO filesystem/bash access, so memory content
+  passed as data can never trick the engine into running tools (injection defense,
+  principles 6/7). System prompt via temp file + stdin user = no argv length limits.
+- **D14 — Embedding dimension = 256** (model2vec `minishlab/potion-base-8M`, verified
+  download+embed → shape (n,256) float32). The index probes the real dim at creation
+  and stores it in a meta table, so a model swap is detected (rebuild required) rather
+  than silently corrupting vectors. Vectors are L2-normalized → L2 distance ranks like
+  cosine; a cosine-ish similarity is derived for the recall confidence signal.
+- **D15 — Package layout.** Library lives in the `scripts/` Python package; entrypoints
+  run as `venv/bin/python -m scripts.<chat|telegram_bot|digest>` from the repo root.
+  `config.py` locates `config/config.yml` relative to its own file (no dependency on
+  `paths.py`); `paths.py` derives all data paths from `config.paths.data_dir` (default =
+  repo root) so a fresh instance can point at its own data dir (install.sh).
+- **D16 — Honest epistemics is prompt+retrieval driven, not a brittle threshold.** The
+  assistant answers personal-history questions ONLY from retrieved MEMORY (passed as
+  delimited DATA); if memory lacks it, it says "I don't have that" and never invents.
+  Retrieval also returns a confidence signal; very weak retrieval is flagged to the
+  model as "no strong matches".
+
+## 2026-06-16 — Design-workflow review folded in (run wf_23cfcd63-754, 10 agents)
+The synthesizer's ADRs confirmed the spine design; 3 adversarial critics found real
+issues in the already-written spine. Resolutions (D17):
+- **D17a — engine error detection (BLOCKER, 3× flagged).** Rewrote engine.py to be
+  JSON-field-first: success requires valid JSON AND `is_error` falsey AND
+  `api_error_status` null AND non-empty `.result`; never gate on returncode. Error
+  KINDS {api_error,timeout,not_found,bad_output,empty}; retry only timeout / 5xx,
+  never 4xx; missing binary -> not_found. Guards principle 6 (an error apology must
+  never surface as a real answer).
+- **D17b — INJECTION_GUARD + closing-tag sanitization (major).** engine prepends a
+  standing INJECTION_GUARD system instruction; data_block neutralizes any literal
+  closing delimiter so poisoned memory can't break out of the DATA fence on later
+  recall. Empty-allowedTools sandbox is the structural backstop.
+- **D17c — engine.log (major).** engine appends ONE JSON line/call (ts,model,tier,
+  duration_ms,ok,cost) to generated/memory/index/engine.log — metadata only, never
+  payloads. Gives per-turn cost/observability.
+- **D17d — config.set_runtime surgical (BLOCKER, 2× flagged).** Replaced the full
+  yaml-dump rewrite (which destroyed the human's comments — violates principle 1)
+  with a textual rewrite of ONLY a machine-managed `runtime:` block. chat_id now lives
+  at runtime.telegram_chat_id.
+- **D17e — index FTS5-only degradation (BLOCKER, 2× flagged).** sqlite-vec import/load
+  is guarded; on failure or embedder name/dim mismatch the index degrades to
+  keyword-only search and never raises inside search/recall/capture. Backend NAME +
+  dim both stored in meta and compared (a same-dim model swap is detected, not silently
+  mixed). A 'rebuild required' signal is surfaced, not a crash.
+- **D17f — index write lock + safe reset (major).** index writes take a process-level
+  flock (index.db.lock); busy_timeout raised to 30s; reindex --reset rebuilds into a
+  temp db then os.replace (never unlinks a live db).
+- **D17g — frozen daily-log format.** Each turn entry begins with an HTML-comment
+  marker `<!-- turn source_id=daily/YYYY-MM-DD#NNN turn_key=<sha> ts=<iso> -->`
+  followed by markdown. capture WRITES it; index._units_daily and snapshot.recent
+  READ it (split on the marker, reuse source_id verbatim). Cross-module contract.
+- **D17h — cost-aware, free-by-default check.sh.** Engine-touching checks (criterion
+  a, e1 digest) run only with PERSONAL_OS_LIVE_ENGINE=1 (default SKIP). Measured cost
+  is ~$0.17/answer turn because empty models.answer => CLI default = opus-4-8[1m]
+  (~15k cache tokens/call). README documents this + how to pin a cheaper answer model,
+  and that swapping engine.py to the direct API removes the Claude Code overhead.
+- **D17i — crontab safety.** install_cron.sh edits via `crontab -l` -> splice a tagged
+  `# >>> personal-os:<name> >>>` block -> `crontab -` (never `crontab <file>`); the
+  cron command is flock-wrapped. The existing `n8n-tether-watchdog.sh` line MUST and
+  WILL survive; check.sh asserts it.
+- **D17j — naming 'drift' deliberately NOT chased.** Since I author every module, I keep
+  my consistent config keys (embedding:, recall.weak_sim/candidate_k, snapshot.ttl_minutes,
+  memory.db) rather than the synthesizer's alternates. No functional difference; avoids churn.
+- **D17k — FTS5 kept standalone (not external-content).** A standalone fts5(text) table
+  with managed rowid is simpler/more robust than external-content + triggers. The FTS
+  table is a derived search index over the chunks source-of-truth, not a duplicated
+  fact — consistent with principle 2 (understood > opaque).

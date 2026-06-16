@@ -1,0 +1,6 @@
+# personal-os engine dependencies (Python 3.12). Minimal + understood.
+requests>=2.31        # Telegram long-poll bot (stdlib + this only)
+PyYAML>=6.0           # config.yml parsing
+sqlite-vec>=0.1.9     # local vector store (vec0 virtual table), single sqlite file
+model2vec>=0.8        # local static embeddings, no torch, zero API cost
+numpy>=1.26           # vector math for embeddings + RRF

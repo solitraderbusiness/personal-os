@@ -1,0 +1,61 @@
+# ============================================================================
+# personal-os .gitignore
+# PRINCIPLE 5 — ENGINE SEPARATED FROM DATA.
+# The committed repo contains ONLY the reusable engine + EMPTY templates.
+# All personal content, memory, and secrets are gitignored and NEVER shipped.
+# This repo is PUBLIC: a single committed secret is permanently compromised.
+# Verify with `git status` and `git check-ignore -v <path>` before every commit.
+# ============================================================================
+
+# --- Secrets & real instance config (NEVER commit) -------------------------
+config/config.yml
+config/secrets.env
+secrets.env
+*.secret
+*.token
+.env
+.env.*
+
+# --- Filled authored files are PRIVATE; only *.template.md is shipped -------
+authored/*.md
+!authored/*.template.md
+
+# --- All machine-generated content (memory, snapshot, index, digests) ------
+generated/
+
+# --- Fuller raw transcripts (private) --------------------------------------
+conversations/
+
+# --- Vector index / databases (defensive; generated/ already covers these) -
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+
+# --- Python runtime --------------------------------------------------------
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# --- Local embedding-model caches (downloaded at install, not shipped) -----
+.cache/
+models/
+.model_cache/
+
+# --- Claude Code harness state (may contain transcripts/local state) -------
+.claude/
+
+# --- Runtime logs & pids ---------------------------------------------------
+*.log
+logs/
+*.pid
+
+# --- Editor / OS noise -----------------------------------------------------
+.DS_Store
+*.swp
+*.swo
+*~
