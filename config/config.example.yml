@@ -46,6 +46,7 @@ recall:
 telegram:
   enabled: true                # if false (or no token in secrets.env) the bot/push are skipped gracefully
   poll_timeout: 50             # long-poll seconds
+  progress_after_seconds: 4    # if a reply takes longer than this, send a "working on it…" note
   # expected_chat_id: 123456   # OPTIONAL: pin your chat id up front to close the
                                # "first sender becomes owner" window. Leave commented to
                                # let the first message claim ownership.

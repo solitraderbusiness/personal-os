@@ -47,7 +47,7 @@ DEFAULT_CONFIG = {
         "weak_sim": 0.35,       # below this top cosine sim => flag "no strong matches"
     },
     "capture": {"store_raw_transcript": False, "max_input_chars": 4000},
-    "telegram": {"enabled": True, "poll_timeout": 50},
+    "telegram": {"enabled": True, "poll_timeout": 50, "progress_after_seconds": 4},
     "digest": {"hour": 7, "minute": 30, "recent_days": 3},
     # active memory: auto-learn from chat (Tier 1) + timed reminders.
     "active_memory": {"enabled": True, "default_lead_minutes": 60},

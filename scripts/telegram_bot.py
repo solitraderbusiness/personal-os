@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 import time
 
 import requests
@@ -209,6 +210,22 @@ def _get_updates(token: str, offset: int, timeout: int):
     return r.json().get("result", [])
 
 
+PROGRESS_MSG = "⏳ Working on it…"
+
+
+def _respond_with_progress(text: str, conversation_id: str, cid, thread_id) -> dict:
+    """Run respond(); if it takes longer than the configured threshold, send a quick
+    'working on it' note so the user knows it's handling the message. Only fires when slow."""
+    delay = float(_config.load_config().get("telegram", {}).get("progress_after_seconds", 4) or 4)
+    timer = threading.Timer(delay, lambda: send_message(PROGRESS_MSG, cid, thread_id))
+    timer.daemon = True
+    timer.start()
+    try:
+        return _assistant.respond(text, conversation_id=conversation_id)
+    finally:
+        timer.cancel()
+
+
 def _handle_text(text: str, cid, conversation_id: str, thread_id=None) -> None:
     def reply(t):
         send_message(t, cid, thread_id)
@@ -265,7 +282,7 @@ def _handle_text(text: str, cid, conversation_id: str, thread_id=None) -> None:
         return
 
     send_typing(cid, thread_id)
-    res = _assistant.respond(text, conversation_id=conversation_id)
+    res = _respond_with_progress(text, conversation_id, cid, thread_id)
     reply(res["answer"])  # natural reply only — no source/file tags (they live internally)
 
 
