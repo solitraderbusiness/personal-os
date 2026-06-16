@@ -145,6 +145,19 @@ def reminders_cron_log() -> Path:
     return generated_dir() / "reminders-cron.log"
 
 
+def sessions_file() -> Path:
+    # per-session short-term context buffers (cleared by /clear and the daily clear)
+    return memory_dir() / "sessions.json"
+
+
+def clear_lock() -> Path:
+    return generated_dir() / "clear.lock"
+
+
+def clear_cron_log() -> Path:
+    return generated_dir() / "clear-cron.log"
+
+
 def conversations_dir() -> Path:
     return data_root() / "conversations"
 

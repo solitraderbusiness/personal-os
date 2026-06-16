@@ -56,6 +56,12 @@ capture:
                                # as a backup, so a lost summary never means lost content
   max_input_chars: 4000        # per-side trim of the turn fed to the summary/extraction call
 
+sessions:
+  enabled: true                # per-topic short-term context buffers for continuity
+  max_turns: 10                # recent turns kept per thread (the buffer /clear clears)
+  daily_clear: "04:00"         # local (instance tz) time to auto-clear ALL buffers nightly
+                               # (long-term memory is always preserved; /clear does it per-thread)
+
 # ---------------------------------------------------------------------------
 # runtime: MACHINE-MANAGED block. scripts/config.set_runtime() rewrites ONLY this
 # block textually (preserving everything above). Do not rely on hand edits here.

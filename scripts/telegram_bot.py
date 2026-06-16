@@ -24,19 +24,22 @@ from . import feedback as _feedback
 from . import learned as _learned
 from . import paths as _paths
 from . import reminders as _reminders
+from . import sessions as _sessions
 
 TG_MAX = 4000  # Telegram hard limit is 4096; leave headroom
 HELP = (
     "personal-os — your private memory assistant.\n\n"
     "Just send a message and I'll answer using your memory (with sources). I quietly "
     "learn your likes/ideas/rules and pick up reminders as we talk.\n\n"
+    "In a forum group, each TOPIC is its own thread with its own short-term context.\n\n"
     "Commands:\n"
     "  /learned          — show things I've learned, pending your confirmation\n"
     "  /keep <id…>       — save those learned items into your permanent files\n"
     "  /drop <id…>       — discard those learned items\n"
     "  /reminders        — list your upcoming reminders\n"
+    "  /clear            — clear THIS thread's short-term context (memory is kept)\n"
     "  /feedback useful|noise <item> — tune the daily digest\n"
-    "  /whoami           — show this chat id\n"
+    "  /whoami           — show this chat / topic id\n"
     "  /help             — this help"
 )
 
@@ -77,9 +80,9 @@ def _split(text: str, limit: int = TG_MAX) -> list[str]:
     return chunks
 
 
-def send_message(text: str, chat_id=None) -> bool:
-    """Send a message to the owner chat (or `chat_id`). Returns True on success.
-    NEVER logs the token or the API URL (which embeds the token)."""
+def send_message(text: str, chat_id=None, thread_id=None) -> bool:
+    """Send a message to the owner chat (or `chat_id`), optionally inside a forum topic
+    (`thread_id`). Returns True on success. NEVER logs the token or the API URL."""
     token = _token()
     if not token:
         _log("no TELEGRAM_BOT_TOKEN configured; cannot send")
@@ -91,8 +94,11 @@ def send_message(text: str, chat_id=None) -> bool:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     ok = True
     for chunk in _split(text):
+        payload = {"chat_id": chat_id, "text": chunk}
+        if thread_id is not None:
+            payload["message_thread_id"] = thread_id
         try:
-            r = requests.post(url, json={"chat_id": chat_id, "text": chunk}, timeout=30)
+            r = requests.post(url, json=payload, timeout=30)
             if r.status_code != 200:
                 _log(f"send failed: HTTP {r.status_code}")  # no url/token/body
                 ok = False
@@ -132,57 +138,67 @@ def _get_updates(token: str, offset: int, timeout: int):
     return r.json().get("result", [])
 
 
-def _handle_text(text: str, cid) -> None:
+def _handle_text(text: str, cid, conversation_id: str, thread_id=None) -> None:
+    def reply(t):
+        send_message(t, cid, thread_id)
+
     low = text.strip().lower()
     if low in ("/start", "/help"):
-        send_message(HELP, cid)
+        reply(HELP)
         return
     if low == "/whoami":
-        send_message(f"This chat id is: {cid}", cid)
+        msg = f"This chat id is: {cid}"
+        if thread_id:
+            msg += f"\nThis topic's thread id is: {thread_id}"
+        reply(msg)
+        return
+    if low == "/clear":
+        n = _sessions.clear(conversation_id)
+        reply(f"🧹 Cleared this thread's short-term context ({n} turn(s)). "
+              f"Your long-term memory is untouched — I can still recall anything later.")
         return
     if low.startswith("/feedback"):
         parts = text.strip().split(None, 2)
         if len(parts) < 3:
-            send_message("usage: /feedback <useful|noise> <item>", cid)
+            reply("usage: /feedback <useful|noise> <item>")
         else:
             try:
                 _feedback.record_feedback(parts[2], parts[1])
-                send_message(f"Recorded as {parts[1].lower()}. Thanks — it tunes your digest.", cid)
+                reply(f"Recorded as {parts[1].lower()}. Thanks — it tunes your digest.")
             except ValueError:
-                send_message("verdict must be 'useful' or 'noise'.", cid)
+                reply("verdict must be 'useful' or 'noise'.")
         return
     if low == "/reminders":
-        send_message("⏰ Upcoming reminders:\n" + (_reminders.format_upcoming(20) or "(none)"), cid)
+        reply("⏰ Upcoming reminders:\n" + (_reminders.format_upcoming(20) or "(none)"))
         return
     if low == "/learned":
         pend = _learned.pending()
         if not pend:
-            send_message("Nothing pending to confirm right now. ✅", cid)
+            reply("Nothing pending to confirm right now. ✅")
         else:
             lines = ["📥 Learned, pending your confirmation —", "reply /keep <id…> or /drop <id…>:"]
             for it in pend:
                 tag = it.get("polarity") or it.get("rule_kind") or it["type"]
                 lines.append(f"  [{it['id']}] {it['type']}/{tag}: {it['text']}")
-            send_message("\n".join(lines), cid)
+            reply("\n".join(lines))
         return
     if low.startswith("/keep"):
-        ids = text.split()[1:]
-        kept = [d["text"] for d in (_learned.promote(i) for i in ids) if d]
-        send_message(("✅ Saved to your files: " + "; ".join(kept)) if kept
-                     else "No matching pending items for those ids.", cid)
+        kept = [d["text"] for d in (_learned.promote(i) for i in text.split()[1:]) if d]
+        reply(("✅ Saved to your files: " + "; ".join(kept)) if kept
+              else "No matching pending items for those ids.")
         return
     if low.startswith("/drop"):
-        ids = text.split()[1:]
-        dropped = [d["text"] for d in (_learned.drop(i) for i in ids) if d]
-        send_message(("🗑 Dropped: " + "; ".join(dropped)) if dropped
-                     else "No matching items for those ids.", cid)
+        dropped = [d["text"] for d in (_learned.drop(i) for i in text.split()[1:]) if d]
+        reply(("🗑 Dropped: " + "; ".join(dropped)) if dropped
+              else "No matching items for those ids.")
         return
-    reply = _assistant.respond(text, conversation_id=f"telegram:{cid}")
-    out = reply["answer"]
-    cites = reply.get("citations") or []
-    if cites and not reply.get("engine_error"):
+
+    res = _assistant.respond(text, conversation_id=conversation_id)
+    out = res["answer"]
+    cites = res.get("citations") or []
+    if cites and not res.get("engine_error"):
         out += "\n\n— sources: " + " ".join(f"[{c['source_id']}]" for c in cites[:5])
-    send_message(out, cid)
+    reply(out)
 
 
 def run() -> None:
@@ -221,6 +237,8 @@ def run() -> None:
                 continue
             cid = msg["chat"]["id"]
             text = msg["text"]
+            thread_id = msg.get("message_thread_id")  # forum topic, if any
+            conversation_id = f"telegram:{cid}" + (f":{thread_id}" if thread_id else "")
             owner = get_owner_chat_id()
             if owner is None:
                 if expected is not None and cid != expected:
@@ -229,16 +247,17 @@ def run() -> None:
                 owner = cid
                 send_message(
                     "👋 personal-os is now linked to this chat (only this chat is "
-                    "authorized). Send me anything, or /help.",
-                    cid,
+                    "authorized). Forum topics work — each topic is its own thread with "
+                    "its own short-term context. Send me anything, or /help.",
+                    cid, thread_id,
                 )
             if cid != owner:
                 continue  # drop non-owner BEFORE the engine is touched (no log of body)
             try:
-                _handle_text(text, cid)
+                _handle_text(text, cid, conversation_id, thread_id)
             except Exception as exc:  # never crash the loop on one bad message
                 _log(f"handler error: {type(exc).__name__}")
-                send_message("Sorry — something went wrong handling that. Try again.", cid)
+                send_message("Sorry — something went wrong handling that. Try again.", cid, thread_id)
 
 
 if __name__ == "__main__":

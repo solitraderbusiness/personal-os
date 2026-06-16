@@ -73,14 +73,12 @@ store, used instantly; Tier 2 authored canon updated only on approval). TZ Asia/
 - [x] GUARD added after D19 incident: POS_DATA_DIR test isolation + raw-transcript backup
 - [ ] (carryover) check.sh additions for active memory; review workflow
 
-## Phase 8 — Sessions & topics (user request 2026-06-16)  ⬜ NEXT
-- Telegram forum TOPICS: each topic = its own session/thread; route via message_thread_id;
-  reply in-topic; tag memory by topic so each thread is separately recallable. Bot stays
-  locked to the one authorized group (topics are sub-threads).
-- Per-session short-term CONTEXT BUFFER (capped) for conversational continuity within a
-  topic (the system is currently stateless per-turn — no growing context). This buffer is
-  what "clear" clears.
-- /clear (clears current topic's buffer) + DAILY auto-clear at 04:00 Asia/Tehran (cron).
-- INVARIANT: every turn is written to long-term memory BEFORE any clear, so clearing only
-  drops short-term context — topics can always be recalled/resumed later. (Already true:
-  capture writes per-turn.)
+## Phase 8 — Sessions & topics  ✅ DONE + verified
+- [x] scripts/sessions.py — per-session capped buffers (append/get_context/clear/clear_all)
+- [x] Telegram topic routing: message_thread_id -> conversation_id telegram:<chat>:<thread>;
+      reply in-topic (send_message thread_id); memory tagged by full conversation_id (source)
+- [x] assistant.respond injects the session buffer + appends after reply (continuity)
+- [x] /clear (per-thread) in telegram + chat.py; daily 04:00 Tehran clear via run_clear.sh + cron
+- [x] tz-aware cron: digest 04:00 UTC (=7:30 Tehran), clear 00:30 UTC (=4:00 Tehran); n8n preserved
+- [x] POS_DATA_DIR-isolated test passed (continuity, topic isolation, per-thread clear, cap, tz)
+- [x] INVARIANT verified: capture writes long-term memory every turn BEFORE any clear

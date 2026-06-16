@@ -7,6 +7,7 @@ Plain lines are sent to the assistant. Local slash commands (handled here, no en
   /snapshot       rebuild + show the injection snapshot (meta + head)
   /reindex [--reset]   rebuild the vector index from all sources
   /stats          index statistics (chunk counts, backend, vector mode)
+  /clear          clear this session's short-term context (long-term memory kept)
   /feedback <useful|noise> <item>   record salience feedback
   /help           this help
   /quit | /exit   leave
@@ -20,6 +21,7 @@ from . import config as _config
 from . import feedback as _feedback
 from . import index as _index
 from . import paths as _paths
+from . import sessions as _sessions
 from . import snapshot as _snapshot
 
 BANNER = "personal-os — terminal. Type a message, or /help for commands. Ctrl-D to quit."
@@ -64,6 +66,9 @@ def _handle_slash(line: str) -> bool:
     elif cmd == "/stats":
         import json
         print(json.dumps(_index.stats(), indent=2))
+    elif cmd == "/clear":
+        n = _sessions.clear("terminal")
+        print(f"  cleared {n} buffered turn(s) for this terminal session (long-term memory kept)")
     elif cmd == "/feedback":
         fp = rest.split(None, 1)
         if len(fp) < 2:

@@ -46,6 +46,8 @@ DEFAULT_CONFIG = {
     "digest": {"hour": 7, "minute": 30, "recent_days": 3},
     # active memory: auto-learn from chat (Tier 1) + timed reminders.
     "active_memory": {"enabled": True, "default_lead_minutes": 60},
+    # sessions: per-topic short-term context buffers (the only thing /clear clears).
+    "sessions": {"enabled": True, "max_turns": 10, "daily_clear": "04:00"},
     # runtime: machine-managed block (set via set_runtime); never hand-edit.
     "runtime": {"telegram_chat_id": None},
 }

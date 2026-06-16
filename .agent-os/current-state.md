@@ -62,7 +62,12 @@ the raw conversations still exist in the user's Telegram. GUARD: POS_DATA_DIR en
 override in paths.data_root() (tests MUST set it; never unlink live paths) + raw
 transcript backup now on. See decision-log D19.
 
-## Phase 8 — Sessions & topics: NEXT (see task-board)
+## Phase 8 — Sessions & topics: ✅ DONE + verified
+Per-topic session buffers (telegram:<chat>:<thread>) for continuity; reply in-topic;
+/clear per-thread + daily 04:00 Tehran clear (cron); memory always written before any
+clear. tz-aware cron (digest 7:30 Tehran=04:00 UTC, clear 4:00 Tehran=00:30 UTC; n8n
+preserved). Bot restarted on Phase-8 code with owner reset → the new group claims it on
+first message. Isolated test passed (POS_DATA_DIR).
 
 ## In flight
 - Design-validation workflow (wf_23cfcd63-754) COMPLETE; ADRs + 3 adversarial critiques

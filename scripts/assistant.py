@@ -16,6 +16,7 @@ from . import config as _config
 from . import engine as _engine
 from . import paths as _paths
 from . import recall as _recall
+from . import sessions as _sessions
 from . import snapshot as _snapshot
 
 STANDING_RULES = """## How to answer (standing rules — authoritative)
@@ -55,9 +56,18 @@ def respond(message: str, conversation_id: str = "terminal") -> dict:
     system = build_system_prompt(agent_md, snap, rec)
     data = _recall.format_memory_block(rec)
 
+    # short-term continuity within this thread/topic (cleared by /clear or the daily clear)
+    buffer = _sessions.get_context(conversation_id)
+    user_for_engine = message
+    if buffer:
+        user_for_engine = (
+            "Recent conversation in this thread (for continuity; latest is last):\n"
+            f"{buffer}\n\n---\nCurrent message: {message}"
+        )
+
     engine_error = False
     try:
-        answer = _engine.complete(system, message, tier="answer", data=data, max_tokens=1000)
+        answer = _engine.complete(system, user_for_engine, tier="answer", data=data, max_tokens=1000)
     except _engine.EngineError as exc:
         engine_error = True
         answer = (
@@ -66,6 +76,7 @@ def respond(message: str, conversation_id: str = "terminal") -> dict:
         )
 
     if not engine_error:
+        _sessions.append_turn(conversation_id, message, answer)
         _capture.capture_turn(message, answer, conversation_id)
 
     return {

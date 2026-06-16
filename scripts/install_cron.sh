@@ -17,20 +17,31 @@ PY="$HERE/venv/bin/python"
 REMOVE=0
 [ "${1:-}" = "--remove" ] && REMOVE=1
 
-# Read instance name + schedule from config (fall back to defaults).
+# Instance name.
 NAME="$(PYTHONPATH="$HERE" "$PY" -c 'from scripts import config; print(config.instance_name())' 2>/dev/null || echo personal-os)"
-read -r HOUR MIN <<EOF
-$(PYTHONPATH="$HERE" "$PY" -c 'from scripts import config; d=config.load_config()["digest"]; print(d.get("hour",7), d.get("minute",30))' 2>/dev/null || echo "7 30")
-EOF
+
+# Cron runs in server (UTC) time, but digest/daily-clear are configured in the instance
+# timezone — convert local HH:MM -> UTC cron fields. Output: "DIG_MIN DIG_HOUR CLR_MIN CLR_HOUR".
+SCHED="$(PYTHONPATH="$HERE" "$PY" -c "
+from scripts import config
+from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
+tz = ZoneInfo(config.timezone()); d = config.load_config()
+def u(h, m):
+    x = datetime(2026, 1, 1, int(h), int(m), tzinfo=tz).astimezone(timezone.utc)
+    return x.minute, x.hour
+dm, dh = u(d['digest']['hour'], d['digest']['minute'])
+cl = str(d.get('sessions', {}).get('daily_clear', '04:00')).split(':')
+cm, ch = u(cl[0], cl[1])
+print(dm, dh, cm, ch)
+" 2>/dev/null || echo '0 4 30 0')"
+read -r DIG_MIN DIG_HOUR CLR_MIN CLR_HOUR <<<"$SCHED"
 
 START="# >>> personal-os:${NAME} >>>"
 END="# <<< personal-os:${NAME} <<<"
-LOCK="$HERE/generated/digest.lock"
-LOG="$HERE/generated/digest-cron.log"
-DIGEST_LINE="${MIN} ${HOUR} * * * flock -n ${LOCK} ${HERE}/scripts/run_digest.sh >> ${LOG} 2>&1"
-REM_LOCK="$HERE/generated/reminders.lock"
-REM_LOG="$HERE/generated/reminders-cron.log"
-REMINDER_LINE="*/10 * * * * flock -n ${REM_LOCK} ${HERE}/scripts/run_reminders.sh >> ${REM_LOG} 2>&1"
+DIGEST_LINE="${DIG_MIN} ${DIG_HOUR} * * * flock -n ${HERE}/generated/digest.lock ${HERE}/scripts/run_digest.sh >> ${HERE}/generated/digest-cron.log 2>&1"
+REMINDER_LINE="*/10 * * * * flock -n ${HERE}/generated/reminders.lock ${HERE}/scripts/run_reminders.sh >> ${HERE}/generated/reminders-cron.log 2>&1"
+CLEAR_LINE="${CLR_MIN} ${CLR_HOUR} * * * flock -n ${HERE}/generated/clear.lock ${HERE}/scripts/run_clear.sh >> ${HERE}/generated/clear-cron.log 2>&1"
 
 # Current crontab (tolerate 'no crontab for user').
 EXISTING="$(crontab -l 2>/dev/null || true)"
@@ -49,7 +60,8 @@ if [ "$REMOVE" -eq 1 ]; then
 fi
 
 mkdir -p "$HERE/generated"
-NEW="$(printf '%s\n%s\n%s\n%s\n%s\n' "$CLEANED" "$START" "$DIGEST_LINE" "$REMINDER_LINE" "$END")"
+NEW="$(printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$CLEANED" "$START" "$DIGEST_LINE" "$REMINDER_LINE" "$CLEAR_LINE" "$END")"
 printf '%s\n' "$NEW" | crontab -
-echo "Installed cron for instance '${NAME}': digest at ${MIN} ${HOUR}, reminders every 10 min (server time)."
+echo "Installed cron for instance '${NAME}' (times converted from $(PYTHONPATH="$HERE" "$PY" -c 'from scripts import config; print(config.timezone())' 2>/dev/null||echo UTC) to UTC):"
+echo "  digest      ${DIG_HOUR}:${DIG_MIN} UTC   reminders every 10 min   daily-clear ${CLR_HOUR}:${CLR_MIN} UTC"
 echo "Verify with: crontab -l"
