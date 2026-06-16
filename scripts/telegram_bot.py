@@ -46,6 +46,11 @@ HELP = (
 )
 
 
+# One persistent HTTP session for ALL Telegram calls — reuses the TCP/TLS connection
+# (a fresh connection per call was a big chunk of the voice latency).
+_session = requests.Session()
+
+
 def _log(msg: str) -> None:
     """Stderr log with timestamp. Never contains the token or API URL."""
     from datetime import datetime
@@ -101,7 +106,7 @@ def send_message(text: str, chat_id=None, thread_id=None) -> bool:
         if thread_id is not None:
             payload["message_thread_id"] = thread_id
         try:
-            r = requests.post(url, json=payload, timeout=30)
+            r = _session.post(url, json=payload, timeout=30)
             if r.status_code != 200:
                 _log(f"send failed: HTTP {r.status_code}")  # no url/token/body
                 ok = False
@@ -120,7 +125,7 @@ def send_typing(chat_id, thread_id=None) -> None:
         payload = {"chat_id": chat_id, "action": "typing"}
         if thread_id is not None:
             payload["message_thread_id"] = thread_id
-        requests.post(f"https://api.telegram.org/bot{token}/sendChatAction", json=payload, timeout=10)
+        _session.post(f"https://api.telegram.org/bot{token}/sendChatAction", json=payload, timeout=10)
     except requests.RequestException:
         pass
 
@@ -128,14 +133,14 @@ def send_typing(chat_id, thread_id=None) -> None:
 def _download_file(token: str, file_id: str) -> bytes | None:
     """Download a Telegram file by id. The URL embeds the token, so it is never logged."""
     try:
-        r = requests.get(f"https://api.telegram.org/bot{token}/getFile",
+        r = _session.get(f"https://api.telegram.org/bot{token}/getFile",
                          params={"file_id": file_id}, timeout=15)
         if r.status_code != 200:
             return None
         fp = (r.json().get("result") or {}).get("file_path")
         if not fp:
             return None
-        fr = requests.get(f"https://api.telegram.org/file/bot{token}/{fp}", timeout=45)
+        fr = _session.get(f"https://api.telegram.org/file/bot{token}/{fp}", timeout=45)
         return fr.content if fr.status_code == 200 else None
     except requests.RequestException:
         return None
@@ -205,7 +210,7 @@ def _save_offset(offset: int) -> None:
 
 def _get_updates(token: str, offset: int, timeout: int):
     url = f"https://api.telegram.org/bot{token}/getUpdates"
-    r = requests.get(url, params={"offset": offset, "timeout": timeout}, timeout=timeout + 15)
+    r = _session.get(url, params={"offset": offset, "timeout": timeout}, timeout=timeout + 15)
     r.raise_for_status()
     return r.json().get("result", [])
 
@@ -286,6 +291,20 @@ def _handle_text(text: str, cid, conversation_id: str, thread_id=None) -> None:
     reply(res["answer"])  # natural reply only — no source/file tags (they live internally)
 
 
+def _process_update(token: str, msg: dict, cid, thread_id, conversation_id: str) -> None:
+    """Handle one message (runs in its own thread). Voice -> transcribe -> answer."""
+    try:
+        text = msg.get("text")
+        if not text and ("voice" in msg or "audio" in msg):
+            text = _voice_to_text(token, msg, cid, thread_id)
+        if not text:
+            return  # unsupported type, or transcription failed (already replied)
+        _handle_text(text, cid, conversation_id, thread_id)
+    except Exception as exc:  # never crash on one bad message
+        _log(f"handler error: {type(exc).__name__}")
+        send_message("Sorry — something went wrong handling that. Try again.", cid, thread_id)
+
+
 def run() -> None:
     token = _token()
     if not token:
@@ -341,16 +360,10 @@ def run() -> None:
             _mtype = ("voice" if "voice" in msg else "audio" if "audio" in msg
                       else "text" if msg.get("text") else "other")
             _log(f"msg from chat={cid} thread={thread_id} type={_mtype}")
-            try:
-                text = msg.get("text")
-                if not text and ("voice" in msg or "audio" in msg):
-                    text = _voice_to_text(token, msg, cid, thread_id)
-                if not text:
-                    continue  # unsupported message type, or transcription failed (already replied)
-                _handle_text(text, cid, conversation_id, thread_id)
-            except Exception as exc:  # never crash the loop on one bad message
-                _log(f"handler error: {type(exc).__name__}")
-                send_message("Sorry — something went wrong handling that. Try again.", cid, thread_id)
+            # Handle in a worker thread so a slow download / model call never blocks the
+            # poll loop. Claude calls are serialized by the engine lock (memory-safe).
+            threading.Thread(target=_process_update, daemon=True,
+                             args=(token, msg, cid, thread_id, conversation_id)).start()
 
 
 if __name__ == "__main__":
