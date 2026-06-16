@@ -35,14 +35,20 @@ _Updated: 2026-06-16. Keep accurate so the build can resume at any point._
 
 ## BUILD COMPLETE — all 6 phases done; acceptance suite fully green.
 
-## Remaining go-live steps (need the user)
-- Telegram token → config/secrets.env, then run `python -m scripts.telegram_bot` and
-  message it once (it claims ownership). Cron digest will then push.
-- Fill authored/about-me.md (+ others) from the user's draft, then `index reindex`.
-- git push: repo has commits locally but NO remote configured and NOT pushed. Needs the
-  user's fine-grained PAT (Contents: r/w) or deploy key. Final secret scan done = clean.
-- Optional Phase-0 finish: disable SSH password login (one-liner; user confirm) — keys
-  already work, ufw already allows 22.
+## Go-live status
+- **git push: DONE.** remote `origin` = github.com/solitraderbusiness/personal-os; `main`
+  pushed. Public tree verified = engine + templates + examples + docs + .agent-os only
+  (no secrets/personal data). The push token (classic `repo` PAT) is in the git
+  credential store (~/.git-credentials, helper=store) → future pushes just work; no need
+  to re-find. (Token was recovered from bash_history per user; that cleartext copy was
+  redacted afterward.)
+- **Models:** answer tier = Sonnet (claude-sonnet-4-6); summary/digest = Haiku. Opus is
+  only for coding the project (this Claude Code session). Set per user.
+- Remaining (need the user):
+  - Telegram token → config/secrets.env, then `python -m scripts.telegram_bot` + message
+    it once (claims ownership). Cron digest then pushes to that chat.
+  - Fill authored/about-me.md (+ others) from the user's draft, then `index reindex`.
+  - Optional Phase-0 finish: disable SSH password login (one-liner; user confirm).
 
 ## In flight
 - Design-validation workflow (wf_23cfcd63-754) COMPLETE; ADRs + 3 adversarial critiques
