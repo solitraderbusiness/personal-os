@@ -155,19 +155,25 @@ def _voice_to_text(token: str, msg: dict, cid, thread_id) -> str | None:
     obj = msg.get("voice") or msg.get("audio")
     if not obj:
         return None
+    _log(f"voice received: dur={obj.get('duration','?')}s mime={obj.get('mime_type','?')}")
     send_typing(cid, thread_id)
     audio = _download_file(token, obj["file_id"])
     if not audio:
+        _log("voice: download FAILED")
         send_message("Couldn't fetch that voice message — please try again.", cid, thread_id)
         return None
-    text = _transcribe.transcribe(audio, _audio_format(msg, obj))
+    fmt = _audio_format(msg, obj)
+    _log(f"voice: downloaded {len(audio)} bytes, fmt={fmt}; transcribing…")
+    text = _transcribe.transcribe(audio, fmt)
     if not text:
+        _log("voice: transcription returned empty/None")
         if not _config.get_secret("OPENROUTER_API_KEY"):
             send_message("Voice isn't set up yet — add OPENROUTER_API_KEY to secrets.env to "
                          "enable transcription. You can still type to me.", cid, thread_id)
         else:
             send_message("Sorry, I couldn't transcribe that — try again, or type it.", cid, thread_id)
         return None
+    _log(f"voice: transcript ok ({len(text)} chars): {text[:60]!r}")
     send_message(f"🎙️ {text}", cid, thread_id)  # echo so you can see/correct what was heard
     return text
 
@@ -321,6 +327,9 @@ def run() -> None:
                 )
             if cid != owner:
                 continue  # drop non-owner BEFORE the engine is touched (no log of body)
+            _mtype = ("voice" if "voice" in msg else "audio" if "audio" in msg
+                      else "text" if msg.get("text") else "other")
+            _log(f"msg from chat={cid} thread={thread_id} type={_mtype}")
             try:
                 text = msg.get("text")
                 if not text and ("voice" in msg or "audio" in msg):
