@@ -4,6 +4,8 @@
 
 instance:
   name: "personal-os"          # label for this instance (yours alone)
+  timezone: "UTC"              # IANA tz (e.g. "Asia/Tehran"); interprets natural times
+                               # like "tomorrow 10am" and fires reminders in this zone
 
 paths:
   data_dir: ""                 # where authored/, generated/, conversations/ live.
@@ -48,6 +50,11 @@ digest:
   hour: 7                      # cron time (server local) for the daily digest
   minute: 30
   recent_days: 3               # days of activity the digest reviews
+
+capture:
+  store_raw_transcript: false  # true => also keep raw turn text in conversations/ (gitignored)
+                               # as a backup, so a lost summary never means lost content
+  max_input_chars: 4000        # per-side trim of the turn fed to the summary/extraction call
 
 # ---------------------------------------------------------------------------
 # runtime: MACHINE-MANAGED block. scripts/config.set_runtime() rewrites ONLY this

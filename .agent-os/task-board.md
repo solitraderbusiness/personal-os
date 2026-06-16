@@ -54,7 +54,33 @@
 - [x] ./check.sh => 10 passed · 0 failed (live engine) / 8 passed · 0 failed (free)
 
 ## Go-live (needs user)
-- [ ] Telegram token in secrets.env → live bot test
+- [x] Telegram token in secrets.env → live bot test (works; @Jarvis_Summit_bot)
 - [ ] Fill authored/about-me.md from draft → reindex
-- [ ] git push (provide PAT/deploy key; remote not configured yet)
+- [x] git push (token from store; pushed to origin/main)
 - [~] Disable SSH password login (optional; user confirm)
+
+## Phase 7 — Active memory (auto-learn + reminders)  ✅ DONE
+Decision: "auto-learn now, confirm later" two-tier (Tier 1 auto -> generated learned
+store, used instantly; Tier 2 authored canon updated only on approval). TZ Asia/Tehran.
+- [x] config.instance.timezone + config/example
+- [x] scripts/extract.py (one cheap call -> summary + preferences/ideas/rules/reminders)
+- [x] scripts/learned.py (machine-owned learned store; dedup; render; promote/drop)
+- [x] scripts/reminders.py (tz-aware add/due/check+push; idempotent notify)
+- [x] integrate into capture (analyze_turn) + snapshot (learned + upcoming) + digest (pending+upcoming)
+- [x] telegram /keep /drop /learned /reminders
+- [x] reminders tick cron (every 10 min) + run_reminders.sh; install_cron updates (n8n preserved)
+- [x] verified end-to-end (extract+tz conversion+promote+drop+reminders)
+- [x] GUARD added after D19 incident: POS_DATA_DIR test isolation + raw-transcript backup
+- [ ] (carryover) check.sh additions for active memory; review workflow
+
+## Phase 8 — Sessions & topics (user request 2026-06-16)  ⬜ NEXT
+- Telegram forum TOPICS: each topic = its own session/thread; route via message_thread_id;
+  reply in-topic; tag memory by topic so each thread is separately recallable. Bot stays
+  locked to the one authorized group (topics are sub-threads).
+- Per-session short-term CONTEXT BUFFER (capped) for conversational continuity within a
+  topic (the system is currently stateless per-turn — no growing context). This buffer is
+  what "clear" clears.
+- /clear (clears current topic's buffer) + DAILY auto-clear at 04:00 Asia/Tehran (cron).
+- INVARIANT: every turn is written to long-term memory BEFORE any clear, so clearing only
+  drops short-term context — topics can always be recalled/resumed later. (Already true:
+  capture writes per-turn.)

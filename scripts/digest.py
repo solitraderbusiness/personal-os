@@ -22,7 +22,9 @@ from . import capture as _capture
 from . import config as _config
 from . import engine as _engine
 from . import feedback as _feedback
+from . import learned as _learned
 from . import paths as _paths
+from . import reminders as _reminders
 
 DIGEST_SYS = (
     "You write a short, calm daily brief for the user of a personal memory assistant. "
@@ -92,6 +94,16 @@ def generate_digest(d: str | None = None, *, push: bool = True) -> dict:
             f"This is an observable failure, not a silent skip. Check the engine "
             f"(e.g. `claude` CLI auth) and the cron log at "
             f"`generated/digest-cron.log`."
+        )
+
+    # Deterministic active-memory sections appended to the brief.
+    ups = _reminders.format_upcoming(10)
+    if ups:
+        body += "\n\n## ⏰ Upcoming reminders\n" + ups
+    pend = _learned.pending()
+    if pend:
+        body += "\n\n## 📥 Learned — to confirm (reply /keep <id> or /drop <id>)\n" + "\n".join(
+            f"- [{it['id']}] {it['type']}: {it['text']}" for it in pend
         )
 
     out = _paths.digest_file(d)

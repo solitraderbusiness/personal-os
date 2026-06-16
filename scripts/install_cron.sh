@@ -27,7 +27,10 @@ START="# >>> personal-os:${NAME} >>>"
 END="# <<< personal-os:${NAME} <<<"
 LOCK="$HERE/generated/digest.lock"
 LOG="$HERE/generated/digest-cron.log"
-CRON_LINE="${MIN} ${HOUR} * * * flock -n ${LOCK} ${HERE}/scripts/run_digest.sh >> ${LOG} 2>&1"
+DIGEST_LINE="${MIN} ${HOUR} * * * flock -n ${LOCK} ${HERE}/scripts/run_digest.sh >> ${LOG} 2>&1"
+REM_LOCK="$HERE/generated/reminders.lock"
+REM_LOG="$HERE/generated/reminders-cron.log"
+REMINDER_LINE="*/10 * * * * flock -n ${REM_LOCK} ${HERE}/scripts/run_reminders.sh >> ${REM_LOG} 2>&1"
 
 # Current crontab (tolerate 'no crontab for user').
 EXISTING="$(crontab -l 2>/dev/null || true)"
@@ -46,7 +49,7 @@ if [ "$REMOVE" -eq 1 ]; then
 fi
 
 mkdir -p "$HERE/generated"
-NEW="$(printf '%s\n%s\n%s\n%s\n' "$CLEANED" "$START" "$CRON_LINE" "$END")"
+NEW="$(printf '%s\n%s\n%s\n%s\n%s\n' "$CLEANED" "$START" "$DIGEST_LINE" "$REMINDER_LINE" "$END")"
 printf '%s\n' "$NEW" | crontab -
-echo "Installed daily-digest cron for instance '${NAME}' at ${MIN} ${HOUR} (server time)."
+echo "Installed cron for instance '${NAME}': digest at ${MIN} ${HOUR}, reminders every 10 min (server time)."
 echo "Verify with: crontab -l"

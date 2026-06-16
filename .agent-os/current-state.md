@@ -50,6 +50,20 @@ _Updated: 2026-06-16. Keep accurate so the build can resume at any point._
   - Fill authored/about-me.md (+ others) from the user's draft, then `index reindex`.
   - Optional Phase-0 finish: disable SSH password login (one-liner; user confirm).
 
+## Phase 7 — Active memory: ✅ DONE + verified
+Auto-extraction (one Haiku call) -> learned.json (Tier 1, instant) + reminders.json
+(tz-aware). Snapshot shows learned + upcoming reminders. /keep /drop /learned /reminders
+bot commands; digest lists pending + upcoming; 10-min reminders cron tick (n8n preserved).
+capture.store_raw_transcript enabled (raw backup).
+
+## ⚠️ Incident (D19) — I deleted ~53 live turns during a test on 2026-06-16
+Destructive test cleanup hit the live data_dir. Unrecoverable locally (raw was off);
+the raw conversations still exist in the user's Telegram. GUARD: POS_DATA_DIR env
+override in paths.data_root() (tests MUST set it; never unlink live paths) + raw
+transcript backup now on. See decision-log D19.
+
+## Phase 8 — Sessions & topics: NEXT (see task-board)
+
 ## In flight
 - Design-validation workflow (wf_23cfcd63-754) COMPLETE; ADRs + 3 adversarial critiques
   folded into decision log (D17) and code. No personal-data-in-git leak found by critics.

@@ -21,7 +21,9 @@ from datetime import datetime, timezone
 
 from . import capture as _capture
 from . import config as _config
+from . import learned as _learned
 from . import paths as _paths
+from . import reminders as _reminders
 
 # Authored files that form the never-dropped identity core.
 IDENTITY_FILES = ["about-me.md", "agent-persona.md", "dos-and-donts.md"]
@@ -90,6 +92,14 @@ def build_snapshot(*, now: datetime | None = None) -> dict:
             identity_parts.append(_section(_title_for(name), f"authored/{name}", body))
             sources.append(f"authored/{name}")
     identity_text = "\n".join(p for p in identity_parts if p)
+
+    # --- active memory: auto-learned (Tier 1) + upcoming reminders (always included) ---
+    learned_text = _learned.render_for_snapshot()
+    up_text = _reminders.format_upcoming(8)
+    if learned_text:
+        identity_text += "\n## Working memory (auto-learned; not yet confirmed)\n" + learned_text + "\n"
+    if up_text:
+        identity_text += "\n## Upcoming reminders\n" + up_text + "\n"
 
     # --- recent memory (trimmed to fit under the cap) ---
     recent = _capture.recent_summaries(

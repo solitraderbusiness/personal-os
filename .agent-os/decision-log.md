@@ -119,3 +119,20 @@ issues in the already-written spine. Resolutions (D17):
   with managed rowid is simpler/more robust than external-content + triggers. The FTS
   table is a derived search index over the chunks source-of-truth, not a duplicated
   fact — consistent with principle 2 (understood > opaque).
+
+## 2026-06-16 — Phase 7 (active memory) + a real mistake to never repeat
+- **D18 — Active memory built.** Auto-extraction (one Haiku call -> summary + preferences/
+  ideas/rules/timed-reminders) to a machine-owned Tier-1 store (learned.json), used
+  instantly in the snapshot; promotion to authored canon is approval-gated (/keep, /drop).
+  Timezone-aware reminders (Asia/Tehran) with a 10-min cron tick pushing Telegram nudges
+  before due. /keep /drop /learned /reminders bot commands; digest lists pending + upcoming.
+- **D19 — LESSON (mistake I made, must never repeat): I deleted live user data during a
+  test.** A throwaway test's cleanup ran `paths.daily_file().unlink()` + `index.reindex_all(
+  reset=True)` against the LIVE instance while the user was actively chatting with the bot —
+  destroying ~53 real captured turns from that day (unrecoverable locally; raw transcripts
+  were off; no /proc handle). ROOT CAUSE: ran a destructive test against live data instead
+  of an isolated dir. GUARDS ADDED: (1) `POS_DATA_DIR` env override in paths.data_root() so
+  any test/sandbox runs fully isolated — ALWAYS set it for tests, NEVER unlink live paths;
+  (2) enabled `capture.store_raw_transcript` so raw turn text is backed up in conversations/
+  and a lost summary/index never means lost content. RULE: never run a cleanup that deletes
+  daily logs / resets the index against a live data_dir; tests use POS_DATA_DIR=$(mktemp -d).

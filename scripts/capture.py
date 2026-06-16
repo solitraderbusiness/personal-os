@@ -18,18 +18,10 @@ import os
 from datetime import date, datetime, timedelta, timezone
 
 from . import config as _config
-from . import engine as _engine
+from . import extract as _extract
 from . import index as _index
 from . import paths as _paths
 from .index import DAILY_MARKER_RE
-
-SUMMARY_SYS = (
-    "You compress ONE conversation turn into a dense 1-3 sentence note for a personal "
-    "memory log. Capture concrete facts about the user, their decisions, preferences, "
-    "commitments, plans, and named entities. Write in the third person (\"The user ...\"). "
-    "Do NOT invent anything that is not present in the turn. Output ONLY the note text, "
-    "with no preamble, labels, or quotes."
-)
 
 
 def _now() -> datetime:
@@ -46,26 +38,6 @@ def _strip_frontmatter(text: str) -> str:
         if end != -1:
             return text[end + 4 :].lstrip("\n")
     return text
-
-
-def _summarize(user_msg: str, assistant_msg: str) -> tuple[str, bool]:
-    """Return (summary, fallback). fallback=True means the engine failed and we stored
-    a trimmed raw turn instead of a model summary (never fabricated)."""
-    cap = _config.load_config().get("capture", {})
-    maxc = int(cap.get("max_input_chars", 4000))
-    turn = f"USER: {user_msg.strip()[:maxc]}\n\nASSISTANT: {assistant_msg.strip()[:maxc]}"
-    try:
-        note = _engine.complete(
-            SUMMARY_SYS,
-            "Summarize this conversation turn for the memory log.",
-            tier="summary",
-            data=turn,
-            max_tokens=180,
-        )
-        return note.strip(), False
-    except _engine.EngineError:
-        gist = user_msg.strip().replace("\n", " ")[:300]
-        return f"[unsummarized turn] The user said: {gist}", True
 
 
 def _turn_key(date_str: str, user_msg: str, assistant_msg: str) -> str:
@@ -95,7 +67,8 @@ def capture(user_msg: str, assistant_msg: str, *, source: str = "terminal", now:
     log_path = _paths.daily_file(date_str)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    summary, fallback = _summarize(user_msg, assistant_msg)
+    analysis = _extract.analyze_turn(user_msg, assistant_msg)
+    summary, fallback = analysis["summary"], analysis["fallback"]
     tkey = _turn_key(date_str, user_msg, assistant_msg)
 
     # flock the daily log around read-seq -> append (terminal + Telegram can race).
@@ -132,8 +105,12 @@ def capture(user_msg: str, assistant_msg: str, *, source: str = "terminal", now:
     except Exception:
         indexed = False  # index is best-effort; the durable daily log is the commit
 
+    # Tier-1 active memory: file likes/ideas/rules/reminders extracted from this turn.
+    learned_counts = _extract.ingest(analysis, source=source)
+
     return {"source_id": source_id, "log_path": str(log_path), "turn_key": tkey,
-            "indexed": indexed, "deduped": False, "summary": summary, "fallback": fallback}
+            "indexed": indexed, "deduped": False, "summary": summary, "fallback": fallback,
+            "learned": learned_counts}
 
 
 def _store_raw(date_str, source_id, user_msg, assistant_msg, now, source) -> None:

@@ -6,6 +6,7 @@ can point at its own data directory.
 """
 from __future__ import annotations
 
+import os
 from datetime import date as _date
 from pathlib import Path
 
@@ -28,6 +29,11 @@ def repo_root() -> Path:
 
 
 def data_root() -> Path:
+    # POS_DATA_DIR env override wins — lets tests/sandboxes run fully isolated from the
+    # live instance (a hard guard against tests ever touching real personal data).
+    env = os.environ.get("POS_DATA_DIR")
+    if env:
+        return Path(env).expanduser().resolve()
     d = (_config.load_config().get("paths", {}) or {}).get("data_dir") or ""
     return Path(d).expanduser().resolve() if d else repo_root()
 
@@ -120,6 +126,23 @@ def digest_lock() -> Path:
 
 def digest_cron_log() -> Path:
     return generated_dir() / "digest-cron.log"
+
+
+def learned_file() -> Path:
+    # machine-owned structured store of auto-learned items (Tier 1)
+    return memory_dir() / "learned.json"
+
+
+def reminders_file() -> Path:
+    return memory_dir() / "reminders.json"
+
+
+def reminders_lock() -> Path:
+    return generated_dir() / "reminders.lock"
+
+
+def reminders_cron_log() -> Path:
+    return generated_dir() / "reminders-cron.log"
 
 
 def conversations_dir() -> Path:

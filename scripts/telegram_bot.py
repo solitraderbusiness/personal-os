@@ -21,17 +21,23 @@ import requests
 from . import assistant as _assistant
 from . import config as _config
 from . import feedback as _feedback
+from . import learned as _learned
 from . import paths as _paths
+from . import reminders as _reminders
 
 TG_MAX = 4000  # Telegram hard limit is 4096; leave headroom
 HELP = (
     "personal-os — your private memory assistant.\n\n"
-    "Just send a message and I'll answer using your memory (with sources).\n"
+    "Just send a message and I'll answer using your memory (with sources). I quietly "
+    "learn your likes/ideas/rules and pick up reminders as we talk.\n\n"
     "Commands:\n"
-    "  /feedback useful <item>  — mark a surfaced item useful\n"
-    "  /feedback noise <item>   — mark it noise (tunes the daily digest)\n"
-    "  /whoami                  — show this chat id\n"
-    "  /help                    — this help"
+    "  /learned          — show things I've learned, pending your confirmation\n"
+    "  /keep <id…>       — save those learned items into your permanent files\n"
+    "  /drop <id…>       — discard those learned items\n"
+    "  /reminders        — list your upcoming reminders\n"
+    "  /feedback useful|noise <item> — tune the daily digest\n"
+    "  /whoami           — show this chat id\n"
+    "  /help             — this help"
 )
 
 
@@ -144,6 +150,32 @@ def _handle_text(text: str, cid) -> None:
                 send_message(f"Recorded as {parts[1].lower()}. Thanks — it tunes your digest.", cid)
             except ValueError:
                 send_message("verdict must be 'useful' or 'noise'.", cid)
+        return
+    if low == "/reminders":
+        send_message("⏰ Upcoming reminders:\n" + (_reminders.format_upcoming(20) or "(none)"), cid)
+        return
+    if low == "/learned":
+        pend = _learned.pending()
+        if not pend:
+            send_message("Nothing pending to confirm right now. ✅", cid)
+        else:
+            lines = ["📥 Learned, pending your confirmation —", "reply /keep <id…> or /drop <id…>:"]
+            for it in pend:
+                tag = it.get("polarity") or it.get("rule_kind") or it["type"]
+                lines.append(f"  [{it['id']}] {it['type']}/{tag}: {it['text']}")
+            send_message("\n".join(lines), cid)
+        return
+    if low.startswith("/keep"):
+        ids = text.split()[1:]
+        kept = [d["text"] for d in (_learned.promote(i) for i in ids) if d]
+        send_message(("✅ Saved to your files: " + "; ".join(kept)) if kept
+                     else "No matching pending items for those ids.", cid)
+        return
+    if low.startswith("/drop"):
+        ids = text.split()[1:]
+        dropped = [d["text"] for d in (_learned.drop(i) for i in ids) if d]
+        send_message(("🗑 Dropped: " + "; ".join(dropped)) if dropped
+                     else "No matching items for those ids.", cid)
         return
     reply = _assistant.respond(text, conversation_id=f"telegram:{cid}")
     out = reply["answer"]

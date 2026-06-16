@@ -18,7 +18,7 @@ _SECRETS_PATH = _REPO_ROOT / "config" / "secrets.env"
 
 # Defaults so the system runs even with a minimal/empty config.yml.
 DEFAULT_CONFIG = {
-    "instance": {"name": "personal-os"},
+    "instance": {"name": "personal-os", "timezone": "UTC"},
     # data_dir: where authored/, generated/, conversations/ live. "" => repo root.
     "paths": {"data_dir": ""},
     # "" for answer => Claude Code default model. Cheap tiers pinned to Haiku.
@@ -41,8 +41,11 @@ DEFAULT_CONFIG = {
         "rrf_k": 60,            # Reciprocal Rank Fusion constant
         "weak_sim": 0.35,       # below this top cosine sim => flag "no strong matches"
     },
+    "capture": {"store_raw_transcript": False, "max_input_chars": 4000},
     "telegram": {"enabled": True, "poll_timeout": 50},
     "digest": {"hour": 7, "minute": 30, "recent_days": 3},
+    # active memory: auto-learn from chat (Tier 1) + timed reminders.
+    "active_memory": {"enabled": True, "default_lead_minutes": 60},
     # runtime: machine-managed block (set via set_runtime); never hand-edit.
     "runtime": {"telegram_chat_id": None},
 }
@@ -92,6 +95,11 @@ def get_secret(name: str, default=None):
 
 def instance_name() -> str:
     return str(load_config().get("instance", {}).get("name") or "personal-os")
+
+
+def timezone() -> str:
+    """IANA timezone for interpreting natural times + firing reminders."""
+    return str((load_config().get("instance", {}) or {}).get("timezone") or "UTC")
 
 
 def model_for(tier: str) -> str:
