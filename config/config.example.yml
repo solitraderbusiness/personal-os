@@ -40,6 +40,9 @@ recall:
 telegram:
   enabled: true                # if false (or no token in secrets.env) the bot/push are skipped gracefully
   poll_timeout: 50             # long-poll seconds
+  # expected_chat_id: 123456   # OPTIONAL: pin your chat id up front to close the
+                               # "first sender becomes owner" window. Leave commented to
+                               # let the first message claim ownership.
 
 digest:
   hour: 7                      # cron time (server local) for the daily digest

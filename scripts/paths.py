@@ -110,6 +110,18 @@ def feedback_file() -> Path:
     return generated_dir() / "feedback.md"
 
 
+def telegram_offset_file() -> Path:
+    return generated_dir() / "telegram_offset.txt"
+
+
+def digest_lock() -> Path:
+    return generated_dir() / "digest.lock"
+
+
+def digest_cron_log() -> Path:
+    return generated_dir() / "digest-cron.log"
+
+
 def conversations_dir() -> Path:
     return data_root() / "conversations"
 

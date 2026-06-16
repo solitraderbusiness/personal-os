@@ -1,0 +1,213 @@
+"""Telegram front-door — the single place you talk to personal-os from anywhere.
+
+A lightweight long-poll bot (stdlib + requests; no heavy framework). It:
+  - reads the bot token ONLY from gitignored secrets.env (never logs it / the URL);
+  - is restricted to a SINGLE authorized chat — the first sender becomes the owner
+    (stored in config runtime); every other chat is dropped BEFORE the engine is
+    ever called (no cost, no injection surface);
+  - relays owner messages through the same assistant.respond() loop as the terminal;
+  - exposes send_message(), reused by the daily digest to push to you.
+
+Run (typically under tmux):   venv/bin/python -m scripts.telegram_bot
+"""
+from __future__ import annotations
+
+import re
+import sys
+import time
+
+import requests
+
+from . import assistant as _assistant
+from . import config as _config
+from . import feedback as _feedback
+from . import paths as _paths
+
+TG_MAX = 4000  # Telegram hard limit is 4096; leave headroom
+HELP = (
+    "personal-os — your private memory assistant.\n\n"
+    "Just send a message and I'll answer using your memory (with sources).\n"
+    "Commands:\n"
+    "  /feedback useful <item>  — mark a surfaced item useful\n"
+    "  /feedback noise <item>   — mark it noise (tunes the daily digest)\n"
+    "  /whoami                  — show this chat id\n"
+    "  /help                    — this help"
+)
+
+
+def _log(msg: str) -> None:
+    """Stderr log. Messages are built by us and never contain the token or API URL."""
+    print(f"[telegram] {msg}", file=sys.stderr, flush=True)
+
+
+def _token() -> str | None:
+    return _config.get_secret("TELEGRAM_BOT_TOKEN")
+
+
+def _redact(text: str, token: str | None) -> str:
+    return text.replace(token, "***") if token else text
+
+
+def _split(text: str, limit: int = TG_MAX) -> list[str]:
+    text = text or "(empty)"
+    if len(text) <= limit:
+        return [text]
+    # hard-wrap any over-long line first so nothing is dropped
+    lines: list[str] = []
+    for line in text.split("\n"):
+        while len(line) > limit:
+            lines.append(line[:limit])
+            line = line[limit:]
+        lines.append(line)
+    chunks, cur = [], ""
+    for line in lines:
+        if cur and len(cur) + len(line) + 1 > limit:
+            chunks.append(cur)
+            cur = line
+        else:
+            cur = f"{cur}\n{line}" if cur else line
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+def send_message(text: str, chat_id=None) -> bool:
+    """Send a message to the owner chat (or `chat_id`). Returns True on success.
+    NEVER logs the token or the API URL (which embeds the token)."""
+    token = _token()
+    if not token:
+        _log("no TELEGRAM_BOT_TOKEN configured; cannot send")
+        return False
+    chat_id = chat_id if chat_id is not None else _config.runtime("telegram_chat_id")
+    if chat_id is None:
+        _log("no chat_id known yet; message not sent")
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    ok = True
+    for chunk in _split(text):
+        try:
+            r = requests.post(url, json={"chat_id": chat_id, "text": chunk}, timeout=30)
+            if r.status_code != 200:
+                _log(f"send failed: HTTP {r.status_code}")  # no url/token/body
+                ok = False
+        except requests.RequestException as exc:
+            _log(f"send error: {type(exc).__name__}")  # never str(exc) (may embed url)
+            ok = False
+    return ok
+
+
+def get_owner_chat_id():
+    return _config.runtime("telegram_chat_id")
+
+
+def _load_offset() -> int:
+    p = _paths.telegram_offset_file()
+    if p.exists():
+        try:
+            return int(p.read_text().strip() or "0")
+        except ValueError:
+            return 0
+    return 0
+
+
+def _save_offset(offset: int) -> None:
+    try:
+        p = _paths.telegram_offset_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(str(offset))
+    except OSError:
+        pass
+
+
+def _get_updates(token: str, offset: int, timeout: int):
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    r = requests.get(url, params={"offset": offset, "timeout": timeout}, timeout=timeout + 15)
+    r.raise_for_status()
+    return r.json().get("result", [])
+
+
+def _handle_text(text: str, cid) -> None:
+    low = text.strip().lower()
+    if low in ("/start", "/help"):
+        send_message(HELP, cid)
+        return
+    if low == "/whoami":
+        send_message(f"This chat id is: {cid}", cid)
+        return
+    if low.startswith("/feedback"):
+        parts = text.strip().split(None, 2)
+        if len(parts) < 3:
+            send_message("usage: /feedback <useful|noise> <item>", cid)
+        else:
+            try:
+                _feedback.record_feedback(parts[2], parts[1])
+                send_message(f"Recorded as {parts[1].lower()}. Thanks — it tunes your digest.", cid)
+            except ValueError:
+                send_message("verdict must be 'useful' or 'noise'.", cid)
+        return
+    reply = _assistant.respond(text, conversation_id=f"telegram:{cid}")
+    out = reply["answer"]
+    cites = reply.get("citations") or []
+    if cites and not reply.get("engine_error"):
+        out += "\n\n— sources: " + " ".join(f"[{c['source_id']}]" for c in cites[:5])
+    send_message(out, cid)
+
+
+def run() -> None:
+    token = _token()
+    if not token:
+        print("No TELEGRAM_BOT_TOKEN in config/secrets.env — Telegram bot disabled.", file=sys.stderr)
+        raise SystemExit(1)
+    tg = _config.load_config().get("telegram", {})
+    if not tg.get("enabled", True):
+        print("telegram.enabled is false in config — not starting.", file=sys.stderr)
+        raise SystemExit(0)
+    poll = int(tg.get("poll_timeout", 50))
+    expected = tg.get("expected_chat_id")
+
+    offset = _load_offset()
+    _log(f"polling (owner={get_owner_chat_id()}). Ctrl-C to stop.")
+    backoff = 1
+    while True:
+        try:
+            updates = _get_updates(token, offset, poll)
+            backoff = 1
+        except requests.RequestException as exc:
+            _log(f"poll error ({type(exc).__name__}); retrying in {backoff}s")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+            continue
+        except KeyboardInterrupt:
+            _log("stopped.")
+            break
+
+        for upd in updates:
+            offset = upd["update_id"] + 1
+            _save_offset(offset)
+            msg = upd.get("message") or upd.get("edited_message")
+            if not msg or "text" not in msg:
+                continue
+            cid = msg["chat"]["id"]
+            text = msg["text"]
+            owner = get_owner_chat_id()
+            if owner is None:
+                if expected is not None and cid != expected:
+                    continue  # someone other than the pinned owner — ignore silently
+                _config.set_runtime("telegram_chat_id", cid)
+                owner = cid
+                send_message(
+                    "👋 personal-os is now linked to this chat (only this chat is "
+                    "authorized). Send me anything, or /help.",
+                    cid,
+                )
+            if cid != owner:
+                continue  # drop non-owner BEFORE the engine is touched (no log of body)
+            try:
+                _handle_text(text, cid)
+            except Exception as exc:  # never crash the loop on one bad message
+                _log(f"handler error: {type(exc).__name__}")
+                send_message("Sorry — something went wrong handling that. Try again.", cid)
+
+
+if __name__ == "__main__":
+    run()

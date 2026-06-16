@@ -19,9 +19,16 @@ _Updated: 2026-06-16. Keep accurate so the build can resume at any point._
   (the one shared respond() loop) + chat.py REPL. Live test: established a fact, recalled
   it WITH a source [daily/...#001], and honestly said "I don't have that" for an
   unmentioned fact. Index grew, daily log written, snapshot capped.
-- **Phase 4 — Telegram front-door:** ⬜ next (token to be provided by user).
-- **Phase 5 — Proactive daily digest via cron + feedback loop:** ⬜ pending (feedback.py done).
-- **Phase 6 — install.sh + README + AGENT.md + check.sh + tests:** ⬜ pending.
+- **Phase 4 — Telegram front-door:** ✅ code done + verified (graceful no-token; token
+  redaction; single-owner enforcement; long-line splitting). Live test pending the
+  user's token in secrets.env.
+- **Phase 5 — Proactive digest + cron:** ✅ done + verified. digest.py (reads
+  priorities/reminders/recent logs/feedback → cheap-tier brief → timestamped file →
+  Telegram push when configured; observable on engine failure). run_digest.sh +
+  install_cron.sh registered the daily job; VERIFIED the unrelated n8n cron line
+  survives, registration is idempotent, and the wrapper runs in a bare `env -i`
+  environment (engine_ok true). feedback.py loop done.
+- **Phase 6 — install.sh + AGENT.md + check.sh + tests + README:** 🔵 next.
 
 ## In flight
 - Design-validation workflow (wf_23cfcd63-754) COMPLETE; ADRs + 3 adversarial critiques

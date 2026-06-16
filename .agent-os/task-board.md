@@ -34,14 +34,15 @@
 - [x] scripts/feedback.py
 - [x] End-to-end verified (recall-with-source + honest gap, live engine)
 
-## Phase 4 — Telegram front-door
-- [ ] scripts/telegram_bot.py (long-poll, single chat_id auth, token redaction, push)
-- [ ] Live test once token is in secrets.env
+## Phase 4 — Telegram front-door  ✅
+- [x] scripts/telegram_bot.py (long-poll, single chat_id auth, token redaction, push)
+- [~] Live test once token is in secrets.env (token not yet provided)
 
-## Phase 5 — Proactive digest
-- [ ] scripts/digest.py (priorities + logs + feedback → digest → Telegram push)
-- [ ] scripts/run_digest.sh (cron wrapper)
-- [ ] scripts/install_cron.sh (marker-block crontab; preserve n8n line)
+## Phase 5 — Proactive digest  ✅
+- [x] scripts/digest.py (priorities + logs + feedback → digest → Telegram push)
+- [x] scripts/run_digest.sh (cron wrapper; verified in bare env)
+- [x] scripts/install_cron.sh (marker-block crontab; n8n line verified preserved; idempotent)
+- [x] Daily digest cron registered for this instance (30 7 server time)
 
 ## Phase 6 — Replicability + docs + tests
 - [ ] install.sh (idempotent fresh isolated instance)
